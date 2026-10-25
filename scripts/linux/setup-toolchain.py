@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Install the toolchain the kernel step uses on a Linux host. Run once, as root:
+"""Install the toolchain the kernel step uses on a Linux host. Run once:
 
     sudo scripts/linux/setup-toolchain.py [PREFIX]      (default /opt/unixnu-linux, or $UNIXNU_TOOLCHAIN)
+
+With dependencies installed, use a writable prefix without root:
+
+    scripts/linux/setup-toolchain.py PREFIX --package-manager none
 
 It builds clang with __builtin_xnu_type_* (llvm-xnu-builtin-type.patch; xnu's kalloc_type signatures have no fallback
 without them) into PREFIX/llvm, cctools-port 1030.6.3-ld64-956.6 (ld64, libtool, nm, lipo; its master, ld64-609,
@@ -11,7 +15,7 @@ layouts that xnu's makefiles expect are under PREFIX.
 
 Host dependencies come from apt, dnf, pacman, zypper, or a preconfigured environment.
 Clang and libclang are selected through llvm-config. Libraries and build products live under PREFIX.
-The xcrun, plutil and codesign shims are installed in /usr/bin for xnu's makefiles.
+The xcrun, plutil and codesign shims are installed in PREFIX/bin for xnu's makefiles.
 """
 import argparse
 import os

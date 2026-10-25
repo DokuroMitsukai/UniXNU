@@ -66,9 +66,9 @@ def linux_env(ctx):
     toolchain = Path(os.environ.get('UNIXNU_TOOLCHAIN', '/opt/unixnu-linux'))
     clt, xctoolchain = toolchain / 'CommandLineTools/usr', toolchain / 'XcodeDefault.xctoolchain/usr'
     for path in (toolchain / 'llvm/bin/clang', clt / 'bin/ld', clt / 'bin/xnu-host-cc', clt / 'libexec/migcom',
-                 xctoolchain / 'bin/iig', Path('/usr/bin/xcrun'), toolchain / 'bin/lzfse'):
+                 xctoolchain / 'bin/iig', toolchain / 'bin/xcrun', toolchain / 'bin/lzfse'):
         if not path.exists():
-            raise Error(f'{path} missing; run "sudo scripts/linux/setup-toolchain.py {toolchain}"')
+            raise Error(f'{path} missing; run "scripts/linux/setup-toolchain.py {toolchain}" (use --package-manager none for preinstalled dependencies)')
     fakeroot = ctx.tree / '.cache/fakeroot'
     return {'PATH': os.pathsep.join([str(clt / 'bin'), str(toolchain / 'bin'), os.environ.get('PATH', '')]),
             'LC_ALL': 'C', 'CLT_PREFIX': str(clt), 'XCTOOLCHAIN_PREFIX': str(xctoolchain),
