@@ -5,7 +5,7 @@ id = "ArmCpu"
 kind = "driver"
 function = "ARM generic interrupt controller and timer"
 scope = "arm64"
-# The GICv2 commits are not in UniXNU/ArmCpu yet; pin the fork until they land.
+# Build the fork, which carries the GICv2 work.
 repository = "https://github.com/DokuroMitsukai/ArmCpu.git"
 revision = "c9c4bd87cabc1fe6736e171cd2540313ac4b7883"
 path = "drivers/ArmCpu"

@@ -1,6 +1,6 @@
 [submodule "drivers/ArmCpu"]
 	path = drivers/ArmCpu
-	# GICv2 support is not upstream yet; pin the fork until it lands.
+	# GICv2 support lives in the fork; keep this submodule pinned there.
 	url = https://github.com/DokuroMitsukai/ArmCpu.git
 [submodule "drivers/ArmDTPlatform"]
 	path = drivers/ArmDTPlatform
