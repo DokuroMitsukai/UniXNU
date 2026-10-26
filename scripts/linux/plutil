@@ -6,7 +6,7 @@ MakeInc.rule use it in three shapes:
 
     plutil -convert xml1|binary1|json [-o OUT] IN
     plutil -lint IN
-    plutil -extract KEYPATH KIND [-o OUT] IN   (rare)
+    plutil -extract KEYPATH KIND [-n] [-o OUT] IN   (rare; -n is ignored)
 
 Anything else is refused loudly rather than silently succeeding.
 """
@@ -53,7 +53,9 @@ def main(argv):
         elif a == "-extract":
             mode, extract = "extract", (argv[i + 1], argv[i + 2])
             i += 3
-        elif a in ("-s", "-r", "-p", "--"):
+        elif a in ("-s", "-r", "-p", "-n", "--"):
+            # -n is accepted for MakeInc.kernel's -extract invocation; the
+            # resulting value is overridden on the make command line anyway.
             i += 1
         elif a.startswith("-"):
             print("plutil: unsupported option %s (UniXNU shim)" % a,
