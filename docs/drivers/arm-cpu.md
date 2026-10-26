@@ -10,7 +10,9 @@ ARM64 CPU, GIC and timer driver. Publishes the CPUs, interrupt controller and ar
 
 ## State
 
-The catalog targets ARM GICv3 and the ARM generic timer with the selected XNU ABI.
+The catalog targets ARM GICv3 and the ARM generic timer with the selected XNU ABI. The driver also accepts a GICv2
+(`arm,gic-400` or `arm,cortex-a15-gic`) device-tree node and uses its distributor and banked CPU interface. GICv2
+bring-up is limited to the boot CPU; secondary-core startup reports `armcpu_smp_fail` 5 and is skipped.
 
 ## Build
 

@@ -10,7 +10,9 @@ ARM64 CPU、GIC 和定时器驱动。发布 CPU、中断控制器和架构定时
 
 ## 状态
 
-组件目录指定 ARM GICv3、ARM 通用定时器及选定的 XNU ABI。
+组件目录指定 ARM GICv3、ARM 通用定时器及选定的 XNU ABI。驱动也接受 GICv2（`arm,gic-400` 或
+`arm,cortex-a15-gic`）设备树节点，使用其分发器和按 CPU 分组的 CPU 接口。GICv2 仅启动引导 CPU；次级 CPU
+启动会把 `armcpu_smp_fail` 记为 5 并跳过。
 
 ## 构建
 
