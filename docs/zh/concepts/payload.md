@@ -18,6 +18,12 @@
 
 负载步骤用 `mformat` 和 `mcopy` 写卷。时间戳固定为 1980-01-01，相同输入得到相同卷。ADT 包含随机种子，两次负载构建不同。
 
+## 压缩内核
+
+BOOT 分区放不下预链接内核的板子设置 `[payload] compress = "uefi"`。负载步骤在写卷前把 `Payloads/kernel.macho` 换成 UEFI 压缩形式（`TianoCompress --uefi`）。DarwinBoot 检查 Mach-O 魔数：普通内核直接使用，否则解压到内存，因此启动项仍使用 `Payloads/kernel.macho` 路径。报告记录 `kernel_compression`、`payload_kernel_bytes` 和写入卷的字节哈希。
+
+压缩器来自 EDK II 树：传入 `--uefi`（含 `Mu_Basecore` 的 Mu-Silicium 检出）或 `--edk2`，或把 `UNIXNU_COMPRESSOR` 设为 `TianoCompress` 可执行文件。
+
 ## 配置
 
 负载步骤写入：

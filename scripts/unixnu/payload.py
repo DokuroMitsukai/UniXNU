@@ -11,8 +11,10 @@ The volume is written with mtools, without mounting, so it is the same on every 
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -81,11 +83,42 @@ def skip_setup_seed(ctx, base, tool_path, tool_args=()):
     return seed
 
 
+def compressor(ctx):
+    """The EDK II Tiano/UEFI compressor that `[payload] compress` uses."""
+    override = os.environ.get('UNIXNU_COMPRESSOR')
+    if override:
+        path = Path(expand(override))
+        if not path.is_file():
+            raise Error(f'UNIXNU_COMPRESSOR does not exist: {path}')
+        return path
+    prebuilt = {'x86_64': 'Linux-x86', 'amd64': 'Linux-x86',
+                'aarch64': 'Linux-ARM-64', 'arm64': 'Linux-ARM-64'}.get(platform.machine().lower())
+    if sys.platform == 'darwin':
+        prebuilt = None
+    for root in (ctx.option('uefi', 'UNIXNU_UEFI'), ctx.option('edk2', 'UNIXNU_EDK2')):
+        if not root:
+            continue
+        for tree in (root, root / 'Mu_Basecore'):
+            # A BaseTools build of this host comes first: it matches the host even where no prebuilt exists.
+            built = tree / 'BaseTools/Source/C/bin/TianoCompress'
+            if built.is_file():
+                return built
+            if prebuilt:
+                candidate = tree / 'BaseTools/Bin/Mu-Basetools_extdep' / prebuilt / 'TianoCompress'
+                if candidate.is_file() and os.access(candidate, os.X_OK):
+                    return candidate
+            wrapper = tree / 'BaseTools/BinWrappers/PosixLike/TianoCompress'
+            if wrapper.is_file():
+                return wrapper
+    raise Error('[payload] compress needs EDK II BaseTools: pass --uefi/--edk2 or set UNIXNU_COMPRESSOR')
+
+
 def build(ctx, kernel=None):
     log('payload')
     spec = ctx.board.get('payload')
     if not spec:
         raise Error('board.toml has no [payload]')
+    compression = spec.get('compress')
     args = ctx.args
     kernel = expand(kernel or getattr(args, 'kernel', None) or ctx.work / 'kernel/kernel.macho')
     if not kernel.is_file():
@@ -141,6 +174,14 @@ def build(ctx, kernel=None):
                 probe.append('--reset-before')
         run(['python3', ctx.tree / 'scripts/patch-xnu-entry-probe.py', payloads / 'kernel.macho', *screen, *probe],
             cwd=ctx.tree, env=dict(os.environ, UNIXNU_UEFI=str(ctx.uefi or '')), log_file=ctx.logs / 'payload-patch.log')
+    if compression:
+        if compression not in ('uefi', True):
+            raise Error(f'[payload] compress: unsupported value {compression!r} (only "uefi")')
+        packed = payloads / 'kernel.macho.uefi'
+        run([str(compressor(ctx)), '-e', '--uefi', '-q', '-o', str(packed), str(payloads / 'kernel.macho')],
+            log_file=ctx.logs / 'payload-compress.log')
+        packed.replace(payloads / 'kernel.macho')
+        log(f'kernel compressed for the payload: {kernel.stat().st_size} -> {(payloads / "kernel.macho").stat().st_size} bytes')
     if trust:
         shutil.copyfile(trust, payloads / 'kernel.macho.trustcache')
     if addon:
@@ -206,6 +247,8 @@ def build(ctx, kernel=None):
         raise Error(f'the payload files take {content >> 20} MiB; raise size_mib (now {size}) in board.toml [payload]')
     write_volume(stage, image, spec.get('volume', 'UNIXNU')[:11], size)
     data_report = {'kernel_sha256': sha256_file(kernel), 'payload_kernel_sha256': sha256_file(payloads / 'kernel.macho'),
+                   'kernel_compression': 'uefi' if compression else None,
+                   'payload_kernel_bytes': (payloads / 'kernel.macho').stat().st_size,
                    'adt_sha256': sha256_file(payloads / 'kernel.macho.adt'), 'kernel_args': line,
                    'trust_cache_sha256': sha256_file(trust) if trust else None, 'gpu_addon_sha256': sha256_file(addon) if addon else None,
                    'data_ramdisk_sha256': sha256_file(data) if data else None, 'skip_setup': bool(getattr(args, 'skip_setup', False)), 'panic_screen': bool(spec.get('panic_screen')),

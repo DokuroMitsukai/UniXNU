@@ -356,6 +356,7 @@ unique_chip_id = "required"
 | --- | --- |
 | `volume` | FAT volume label, at most 11 characters |
 | `size_mib` | Volume size |
+| `compress` | `uefi` stores the payload kernel compressed for a BOOT partition that cannot hold it; DarwinBoot inflates it |
 | `loader` | `firmware` when DarwinBoot is in the firmware volume |
 | `title` | Menu entry title |
 | `dram_size` | DRAM size passed to the ADT tool |

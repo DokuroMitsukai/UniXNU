@@ -157,6 +157,7 @@ Types are `s` for string, `x` for hex cells, `i` for decimal cells, `u` for unsi
 | --- | --- | --- |
 | `volume` | string | FAT label, at most 11 characters |
 | `size_mib` | integer | Volume size |
+| `compress` | string | `uefi` stores `Payloads/kernel.macho` UEFI-compressed; DarwinBoot inflates it at boot |
 | `loader` | string | `firmware` or a driver path mode |
 | `title` | string | Menu title |
 | `dram_size` | string | DRAM size for the ADT |

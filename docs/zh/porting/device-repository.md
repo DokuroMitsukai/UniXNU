@@ -346,6 +346,7 @@ unique_chip_id = "required"
 | --- | --- |
 | `volume` | FAT 卷标，最多 11 字符 |
 | `size_mib` | 卷大小 |
+| `compress` | `uefi` 为放不下内核的 BOOT 分区压缩存储负载内核；DarwinBoot 启动时解压 |
 | `loader` | DarwinBoot 在固件卷中时用 `firmware` |
 | `title` | 菜单标题 |
 | `dram_size` | 传给 ADT 工具的 DRAM 大小 |

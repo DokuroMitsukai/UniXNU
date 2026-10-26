@@ -1,8 +1,10 @@
-"""Android boot image: gzip(BootShim + UEFI FD) with the device tree appended, plus an optional ramdisk.
+"""Android boot image: BootShim + UEFI FD, compressed and with the device tree appended as the
+Mu-Silicium [boot_image_kernel] settings say, plus an optional ramdisk.
 
 Inputs are a Mu-Silicium checkout (BootShim sources, Resources/Configs/<device>.toml, mkbootimg.py),
-the built firmware volume and a compiled device tree. The image is meant for "fastboot boot" only.
-The result is verified by unpacking it again; the output is deterministic.
+the built firmware volume and, when the device tree is appended, a compiled device tree. The image
+is meant for "fastboot boot" only. The result is verified by unpacking it again; the output is
+deterministic.
 """
 import gzip
 import hashlib
@@ -74,11 +76,15 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
     mkbootimg = uefi / 'Resources/Scripts/mkbootimg.py'
     if not mkbootimg.is_file():
         raise Error(f'{mkbootimg} missing: --uefi must be a Mu-Silicium checkout')
-    for path, what in ((fd, 'firmware volume (--fd)'), (dtb, 'device tree (--dtb)')):
-        if not path or not Path(path).is_file():
-            if path == fd:
-                raise Error(f'firmware volume not found: {fd}; run ./unixnu build firmware --uefi {uefi}')
-            raise Error(f'{what} not found: {path}')
+    if not fd or not Path(fd).is_file():
+        raise Error(f'firmware volume not found: {fd}; run ./unixnu build firmware --uefi {uefi}')
+    kernel_config = config.get('boot_image_kernel', {})
+    compression = kernel_config.get('kernel_compression', 'gzip')
+    if compression not in ('gzip', 'none'):
+        raise Error(f'[boot_image_kernel] kernel_compression: unsupported value {compression!r} (gzip or none)')
+    append_dtb = bool(kernel_config.get('append_dtb', True))
+    if append_dtb and (not dtb or not Path(dtb).is_file()):
+        raise Error(f'device tree (--dtb) not found: {dtb}')
     firmware = Path(fd).read_bytes()
     if base is None or size is None:
         raise Error('the Mu-Silicium device config has no [uefi_fd] base and size')
@@ -89,12 +95,14 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
     with tempfile.TemporaryDirectory(prefix='unixnu-bootimg-') as scratch_name:
         scratch = Path(scratch_name)
         shim = compile_shim(uefi, base, size, requires_header, scratch)
-        tree = patch_dtb(Path(dtb).read_bytes(), ctx.board.get('bootimg', {}).get('dtb_node', []), scratch)
-        if tree[:4] != b'\xd0\x0d\xfe\xed' or struct.unpack_from('>I', tree, 4)[0] != len(tree):
-            raise Error('invalid compiled device tree')
+        tree = b''
+        if append_dtb:
+            tree = patch_dtb(Path(dtb).read_bytes(), ctx.board.get('bootimg', {}).get('dtb_node', []), scratch)
+            if tree[:4] != b'\xd0\x0d\xfe\xed' or struct.unpack_from('>I', tree, 4)[0] != len(tree):
+                raise Error('invalid compiled device tree')
         combined = shim + firmware
-        kernel = gzip.compress(combined, mtime=0) + tree
-        kernel_path = scratch / 'Image.gz-dtb'
+        kernel = (gzip.compress(combined, mtime=0) if compression == 'gzip' else combined) + tree
+        kernel_path = scratch / f'Image{".gz" if compression == "gzip" else ""}{"-dtb" if append_dtb else ""}'
         kernel_path.write_bytes(kernel)
         if ramdisk:
             ramdisk_path = Path(ramdisk)
@@ -108,15 +116,16 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
             if key in image:
                 command += [f'--{key}', str(image[key])]
         run(command, capture=True)
-        report = verify(out, combined, tree, ramdisk_path, image)
+        report = verify(out, combined, tree, ramdisk_path, image, compression)
     report.update(image_sha256=sha256_file(out), image_bytes=out.stat().st_size, fd_sha256=sha256_file(fd),
-                  dtb_sha256=sha256_file(dtb), shim_bytes=len(shim), hardware_tested=False)
+                  dtb_sha256=sha256_file(dtb) if append_dtb else None, shim_bytes=len(shim),
+                  kernel_compression=compression, dtb_appended=append_dtb, hardware_tested=False)
     (out.parent / 'boot.json').write_text(json.dumps(report, indent=2) + '\n')
     log(f'bootimg: {out} ({out.stat().st_size} bytes)')
     return out
 
 
-def verify(path, combined, tree, ramdisk_path, image):
+def verify(path, combined, tree, ramdisk_path, image, compression='gzip'):
     """Unpack the image and compare every part with its input."""
     data = Path(path).read_bytes()
     kernel_size, kernel_address, ramdisk_size, _, second_size, _, tags, page, version, _ = struct.unpack_from('<10I', data, 8)
@@ -125,9 +134,12 @@ def verify(path, combined, tree, ramdisk_path, image):
     if kernel_address != image['base'] + image['kernel_offset'] or tags != image['base'] + image['tags_offset']:
         raise Error('boot image load addresses do not match the requested offsets')
     kernel = data[page:page + kernel_size]
-    unpacker = zlib.decompressobj(16 + zlib.MAX_WBITS)
-    if unpacker.decompress(kernel) != combined or not unpacker.eof or unpacker.unused_data != tree:
-        raise Error('gzip, firmware and appended device tree do not round-trip')
+    if compression == 'gzip':
+        unpacker = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        if unpacker.decompress(kernel) != combined or not unpacker.eof or unpacker.unused_data != tree:
+            raise Error('gzip, firmware and appended device tree do not round-trip')
+    elif kernel != combined + tree:
+        raise Error('firmware and appended device tree do not round-trip')
     start = page * (1 + -(-kernel_size // page))
     if data[start:start + ramdisk_size] != Path(ramdisk_path).read_bytes():
         raise Error('ramdisk bytes differ')

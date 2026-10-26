@@ -232,7 +232,7 @@ clang --target=aarch64-none-elf -c \
   BootShim/BootShim.S -o shim.o
 ```
 
-它追加固件卷，用 gzip 压缩，追加设备树，再打包 Android 启动镜像。
+它追加固件卷，按设备配置的 `[boot_image_kernel]` 处理：`kernel_compression = "gzip"` 或 `"none"`，`append_dtb` 决定是否追加设备树。然后打包 Android 启动镜像。
 
 ## 验证
 

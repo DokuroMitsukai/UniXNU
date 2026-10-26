@@ -63,8 +63,9 @@ id = "DarwinBoot"
 kind = "driver"
 function = "UEFI XNU loader"
 scope = "firmware"
-repository = "https://github.com/UniXNU/DarwinBoot.git"
-revision = "3325e352d7df68a9f9ad74832ed94a6acbbd7390"
+# The fork inflates a UEFI-compressed kernel from the payload.
+repository = "https://github.com/DokuroMitsukai/DarwinBoot.git"
+revision = "1e641cb98cef09ef166965ceeba17f49fde66fa5"
 path = "drivers/DarwinBoot"
 hardware = ["ARM64 UEFI"]
 os_abi = []

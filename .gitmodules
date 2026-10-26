@@ -10,7 +10,8 @@
 	url = https://github.com/UniXNU/ArmVirtPlatform.git
 [submodule "drivers/DarwinBoot"]
 	path = drivers/DarwinBoot
-	url = https://github.com/UniXNU/DarwinBoot.git
+	# Kernel inflation for boards whose BOOT partition cannot hold the kernel; pin the fork.
+	url = https://github.com/DokuroMitsukai/DarwinBoot.git
 [submodule "drivers/SoftwareAES"]
 	path = drivers/SoftwareAES
 	url = https://github.com/UniXNU/SoftwareAES.git

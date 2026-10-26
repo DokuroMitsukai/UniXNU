@@ -236,7 +236,7 @@ clang --target=aarch64-none-elf -c \
   BootShim/BootShim.S -o shim.o
 ```
 
-It appends the firmware volume, compresses the pair with gzip, appends the device tree and packs the Android boot image.
+It appends the firmware volume and applies `[boot_image_kernel]` from the device config: `kernel_compression = "gzip"` or `"none"`, and `append_dtb` to append the device tree. Then it packs the Android boot image.
 
 ## Verification
 

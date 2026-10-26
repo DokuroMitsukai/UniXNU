@@ -31,6 +31,7 @@
 | `does not match the kernelcache` | `[kernel.prelink] kernelcache_sha256` | Use the pinned image |
 | Firmware volume size mismatch | `[uefi_fd] size` | Rebuild the firmware or correct the config |
 | Payload larger than `size_mib` | `[payload] size_mib` | Raise the size or remove files |
+| BOOT partition smaller than the kernel | `[payload] compress` | Set `compress = "uefi"` and size the volume for the compressed kernel |
 | `not one of the trust caches this board accepts` | `[payload] trust_cache_sha256` | Use an accepted bundle or pass the owner-signed bundle with `--owner-trust-cache` |
 | `unsupported kernel argument` | Argument characters | Use letters, digits, `_`, `.`, `-` |
 | `command line is ... bytes` | Argument count | Shorten the line to 1000 bytes |

@@ -156,6 +156,7 @@ kernel_args = ["-v", "serial=3", "debug=0x14e"]
 | --- | --- | --- |
 | `volume` | 字符串 | FAT 卷标，最多 11 字符 |
 | `size_mib` | 整数 | 卷大小 |
+| `compress` | 字符串 | `uefi` 把 `Payloads/kernel.macho` 以 UEFI 压缩存储；DarwinBoot 启动时解压 |
 | `loader` | 字符串 | `firmware` 或驱动加载模式 |
 | `title` | 字符串 | 菜单标题 |
 | `dram_size` | 字符串 | ADT 使用的 DRAM 大小 |

@@ -291,7 +291,7 @@ The payload step writes a FAT volume with:
 - the optional `kernel.macho.trustcache`
 - the optional `scratch-data.img`
 
-The kernel command line comes from `[payload] kernel_args`. An extra `--kernel-arg NAME=VALUE` replaces the board argument with the same name. The volume is written with mtools without mounting. The output is `out/<device>/<os_profile>/<config>/payload/payload.img` with `payload.json`.
+The kernel command line comes from `[payload] kernel_args`. An extra `--kernel-arg NAME=VALUE` replaces the board argument with the same name. The volume is written with mtools without mounting. The output is `out/<device>/<os_profile>/<config>/payload/payload.img` with `payload.json`. `[payload] compress = "uefi"` stores the kernel compressed for a small BOOT partition; see [Payload](/concepts/payload#compressed-kernel).
 
 `--owner-trust-cache` supplies an owner-signed bundle with the original caches and extra modules. It replaces `--trust-cache` and skips `[payload] trust_cache_sha256`.
 

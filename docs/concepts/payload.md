@@ -18,6 +18,12 @@ Boot arguments are stored in the payload's `EFI/UniXNU/unixnu.toml`. After chang
 
 The payload step writes the volume with `mformat` and `mcopy`. Timestamps are fixed at 1980-01-01, so the volume is reproducible for the same inputs. The ADT contains a random seed, so two payload builds differ.
 
+## Compressed kernel
+
+A board whose BOOT partition cannot hold the prelinked kernel sets `[payload] compress = "uefi"`. The payload step replaces `Payloads/kernel.macho` with its UEFI-compressed form (`TianoCompress --uefi`) before writing the volume. DarwinBoot checks the Mach-O magic: a plain kernel is used as is, anything else is inflated into memory, so entries keep the `Payloads/kernel.macho` path. The report records `kernel_compression`, `payload_kernel_bytes` and the hash of the stored bytes.
+
+The compressor comes from the EDK II tree: pass `--uefi` (a Mu-Silicium checkout with `Mu_Basecore`) or `--edk2`, or set `UNIXNU_COMPRESSOR` to a `TianoCompress` binary.
+
 ## Configuration
 
 The payload step writes this configuration:

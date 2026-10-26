@@ -280,7 +280,7 @@ package 步骤用 EDK II 构建 `package/`，输出到 `out/<device>/<os_profile
 - 可选的 `kernel.macho.trustcache`
 - 可选的 `scratch-data.img`
 
-内核命令行来自 `[payload] kernel_args`。额外的 `--kernel-arg NAME=VALUE` 替换板级同名参数。卷用 mtools 写入，不挂载。输出为 `out/<device>/<os_profile>/<config>/payload/payload.img` 和 `payload.json`。
+内核命令行来自 `[payload] kernel_args`。额外的 `--kernel-arg NAME=VALUE` 替换板级同名参数。卷用 mtools 写入，不挂载。输出为 `out/<device>/<os_profile>/<config>/payload/payload.img` 和 `payload.json`。`[payload] compress = "uefi"` 为放不下内核的 BOOT 分区压缩存储内核，见[负载](/zh/concepts/payload#压缩内核)。
 
 `--owner-trust-cache` 传入 owner 签名的包，包含原始缓存和额外模块。它替换 `--trust-cache`，并跳过 `[payload] trust_cache_sha256`。
 
