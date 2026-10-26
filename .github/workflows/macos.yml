@@ -307,7 +307,8 @@ jobs:
             echo "| payload | ${PAYLOAD:-skipped} |"
             echo
             echo "This workflow only checks that the build works. It publishes text logs (7 days) and no images."
-            xcodebuild -version | head -n 1
+            # Do not pipe xcodebuild into head: it exits on SIGPIPE after the first line and aborts the step.
+            xcodebuild -version
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove proprietary inputs
