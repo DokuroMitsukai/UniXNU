@@ -1,6 +1,7 @@
 [submodule "drivers/ArmCpu"]
 	path = drivers/ArmCpu
-	url = https://github.com/UniXNU/ArmCpu.git
+	# GICv2 support is not upstream yet; pin the fork until it lands.
+	url = https://github.com/DokuroMitsukai/ArmCpu.git
 [submodule "drivers/ArmDTPlatform"]
 	path = drivers/ArmDTPlatform
 	url = https://github.com/UniXNU/ArmDTPlatform.git

@@ -5,8 +5,9 @@ id = "ArmCpu"
 kind = "driver"
 function = "ARM generic interrupt controller and timer"
 scope = "arm64"
-repository = "https://github.com/UniXNU/ArmCpu.git"
-revision = "fba847bd4488e8b7bb715a91ba87e59d8fffbb66"
+# The GICv2 commits are not in UniXNU/ArmCpu yet; pin the fork until they land.
+repository = "https://github.com/DokuroMitsukai/ArmCpu.git"
+revision = "c9c4bd87cabc1fe6736e171cd2540313ac4b7883"
 path = "drivers/ArmCpu"
 hardware = ["ARM GICv2", "ARM GICv3", "ARM generic timer"]
 os_abi = ["ipados-17.7.11-21H461"]
