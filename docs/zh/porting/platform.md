@@ -15,7 +15,7 @@
 | 实现部分 | 源码 | 阅读与实现内容 |
 | --- | --- | --- |
 | 平台匹配 | [ArmDTPlatform.cpp](https://github.com/UniXNU/ArmDTPlatform/blob/417ff95d6a6e8607ddea9309ec45c3bfd4a67c60/ArmDTPlatform.cpp#L33) | `ArmDTPlatform`：ADT 根节点、子设备和 NVRAM 发布 |
-| CPU 与中断 | [ArmCpu.cpp](https://github.com/UniXNU/ArmCpu/blob/08dd19e057171da9b496e3c93beb93e01b211022/ArmCpu.cpp#L48) | `ArmCpu`：CPU 注册、计时器/GIC 初始化、次级核入口和 IPI |
+| CPU 与中断 | [ArmCpu.cpp](https://github.com/UniXNU/ArmCpu/blob/6252bbeb8a679983b6b32b7604d0804b53671be3/ArmCpu.cpp#L48) | `ArmCpu`：CPU 注册、计时器/GIC 初始化、次级核入口和 IPI |
 | DMA 转换 | [ArmSmmu4K.h](https://github.com/UniXNU/ArmSmmu4K/blob/8bb168ad058c28d5c04f179ba407875eacba7ef3/ArmSmmu4K.h), [ArmSmmu4KContext.h](https://github.com/UniXNU/ArmSmmu4K/blob/8bb168ad058c28d5c04f179ba407875eacba7ef3/ArmSmmu4KContext.h) | 页表分配、映射和上下文编程，先匹配目标 SMMU 版本 |
 
 ## 1. 描述 CPU 和中断资源
