@@ -16,7 +16,7 @@ examples.
 | Implementation | Source | What to read and implement |
 | --- | --- | --- |
 | Platform matching | [ArmDTPlatform.cpp](https://github.com/UniXNU/ArmDTPlatform/blob/417ff95d6a6e8607ddea9309ec45c3bfd4a67c60/ArmDTPlatform.cpp#L33) | `ArmDTPlatform`: ADT root, child nubs and NVRAM publication |
-| CPU and interrupts | [ArmCpu.cpp](https://github.com/UniXNU/ArmCpu/blob/9066b53bbc82e92a98ec44a11dd50fd13eaf1a1b/ArmCpu.cpp#L48) | `ArmCpu`: CPU registration, timer/GIC setup, secondary entry and IPI delivery |
+| CPU and interrupts | [ArmCpu.cpp](https://github.com/UniXNU/ArmCpu/blob/08dd19e057171da9b496e3c93beb93e01b211022/ArmCpu.cpp#L48) | `ArmCpu`: CPU registration, timer/GIC setup, secondary entry and IPI delivery |
 | DMA translation | [ArmSmmu4K.h](https://github.com/UniXNU/ArmSmmu4K/blob/8bb168ad058c28d5c04f179ba407875eacba7ef3/ArmSmmu4K.h), [ArmSmmu4KContext.h](https://github.com/UniXNU/ArmSmmu4K/blob/8bb168ad058c28d5c04f179ba407875eacba7ef3/ArmSmmu4KContext.h) | Table allocation, mappings and context programming; match the target SMMU generation |
 
 ## 1. Describe CPU and interrupt resources
