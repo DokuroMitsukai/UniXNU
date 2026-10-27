@@ -45,6 +45,7 @@ parser.add_argument('--owned-memory-size', type=lambda value: int(value, 0), hel
 parser.add_argument('--qemu-memory-mib', type=int, choices=[1024, 2048, 4096, 8192], default=1024,
                     help='Actual offline VM RAM; DarwinBoot must still allocate its entire separate requested window')
 parser.add_argument('--qemu-accel', choices=['tcg', 'hvf'], default='tcg', help='Offline test accelerator; HVF requires explicit actual QEMU VMM identity')
+parser.add_argument('--firmware', type=Path, help='QEMU AArch64 UEFI code FD for the ESP test')
 parser.add_argument('--zone-pgz-probe-case', type=int, choices=[1, 2, 3, 4], help='Run the explicit opt-in owned allocator fixture: positive, misaligned, wrong-zone, freed')
 parser.add_argument('--capture-qemu-screen',action='store_true',help='Read actual paused QEMU scanout through QMP screendump')
 parser.add_argument('--qemu-ramfb', action='store_true', help='Attach actual offline ramfb and pass firmware GOP through the loader')
@@ -85,6 +86,7 @@ parser.add_argument('--armcpu', action='store_true', help='Describe GICv3 resour
 parser.add_argument('--missing-gic', action='store_true', help='Omit GIC resources to test CPU driver rejection')
 parser.add_argument('--check-commpage', action='store_true', help='Require real legacy and RO commpage user page shifts of 12')
 parser.add_argument('--native-user', action='store_true', help='Boot the signed static Darwin EL0/SVC fixture as md0/mockfs')
+parser.add_argument('--native-user-panic', action='store_true', help='Stop at the fixture report panic instead of the idle checkpoint')
 parser.add_argument('--native-data-user-image',type=Path,help='Observe a fixed-address own static instrument staged through the signed original-root/Data init path; no mockfs boot')
 parser.add_argument('--native-user-image', type=Path, help='Explicit own process image with a sibling addresses.json symbol record')
 parser.add_argument('--data-ramdisk', type=Path, help='Explicit mutable scratch APFS initrd; retain the genuine original OS disk root')
@@ -411,7 +413,7 @@ if args.native_user:
         shutil.copyfile(args.native_user_ramdisk, payloads / root_name)
     config = esp / 'EFI/UniXNU/unixnu.toml'
     config.write_text(config.read_text().replace('args = "-v', f'initrd = "Payloads/{root_name}"\nargs = "rd=md0 -v'))
-    if args.break_symbol == '_panic':
+    if args.break_symbol == '_panic' and not args.native_user_panic:
         args.break_symbol = '_native_user_checkpoint'
 if args.data_ramdisk:
     shutil.copyfile(args.data_ramdisk, payloads / 'scratch-data.img')
@@ -555,6 +557,8 @@ gdb_command = ['python3', ROOT / 'scripts/qemu-entry/gdb-stop.py', f'0x{panic[1]
                '--fixture', output, '--esp', esp, '--kernel', args.kernel,
                '--system-registers', '--timeout', str(args.timeout), '--qemu-accel', args.qemu_accel,
                '--qemu-memory-mib', str(args.qemu_memory_mib)]
+if args.firmware:
+    gdb_command += ['--firmware', args.firmware]
 gdb_command += process_list_args
 if args.capture_scratch_data:
     if not args.data_ramdisk:
@@ -1155,6 +1159,8 @@ if args.inspect_dyld_flags:
 user_requests = {}
 if args.native_user:
     user_inspections = [('_results', 32), ('_user_page_size', 8), ('_old_length', 8)]
+    if '_ram_root_diagnostic_results' in user_addresses:
+        user_inspections += [('_ram_root_diagnostic_results', 96)]
     if '_fp_context_results' in user_addresses:
         user_inspections += [('_fp_context_results',80),('_fp_context_actual',512),('_fp_context_expected',512)]
     if '_file_probe_results' in user_addresses:

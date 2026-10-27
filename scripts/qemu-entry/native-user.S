@@ -39,6 +39,12 @@ _start:
 #ifdef NATIVE_FILE_PROBE
 #include "native-file-probe.inc"
 #endif
+#ifdef NATIVE_RAM_ROOT_REPORT
+#include "native-ram-root-report.inc"
+#endif
+#ifdef NATIVE_RAM_ROOT_FS_TIMER
+#include "native-ram-root-fs-timer.inc"
+#endif
 _checkpoint:
   b _checkpoint
 .data
