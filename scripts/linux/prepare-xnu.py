@@ -73,6 +73,18 @@ def rewrite_sources():
         isa.write_text(text.replace(ISA_APPLE, ISA_ANY))
         info('patched corecrypto/arm64_isa_compatibility.h: standard vector syntax for non-Apple clang')
 
+    # SETUP/config/doconf generates each component's Makefile and starts with the macOS shebang `#!/bin/csh -f`.
+    # Linux hosts provide tcsh (setup-toolchain.py requires it), so point the shebang at the shell that exists.
+    doconf = XNU / 'SETUP/config/doconf'
+    first, _, body = doconf.read_text().partition('\n')
+    if first.startswith('#!') and 'csh' in first:
+        csh = shutil.which('csh') or shutil.which('tcsh')
+        if not csh:
+            sys.exit('missing host tool: csh or tcsh (SETUP/config/doconf needs one)')
+        if first.split()[0][2:] != csh:
+            doconf.write_text(f'#!{csh} -f\n{body}')
+            info(f'patched SETUP/config/doconf: shebang -> {csh}')
+
     # SETUP/kextsymboltool's seekFile() treats `offset != lseek()` as a full disk. check_all_exports runs it with
     # `-output /dev/null`, where Linux lseek() returns 0, so the export check failed after the kernel link. make
     # rebuilds the tool when its source changes.

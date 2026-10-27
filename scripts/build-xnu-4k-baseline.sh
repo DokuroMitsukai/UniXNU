@@ -57,8 +57,13 @@ python3 scripts/prepare-xnu-source.py
 XNU_HOST_MAKE_ARGS=()
 if [ "$(uname -s)" = Linux ]; then
   python3 scripts/linux/prepare-xnu.py source
-  export PLATFORM=iPhoneOS HOST_CC="$CLT_PREFIX/bin/xnu-host-cc" MIGCOM="$CLT_PREFIX/libexec/migcom"
-  XNU_HOST_MAKE_ARGS=(TIGHTBEAMC=tightbeamc-not-supported BUILD_DSYM=0
+  # MakeInc.cmd hardcodes /usr/bin/xcrun and /usr/bin/codesign, which bypass the
+  # shims installed in a non-root toolchain prefix. Point both at the prefix.
+  XCRUN="${XCRUN:-$CLT_PREFIX/../../bin/xcrun}"
+  export PLATFORM=iPhoneOS HOST_CC="$CLT_PREFIX/bin/xnu-host-cc" MIGCOM="$CLT_PREFIX/libexec/migcom" \
+    HOST_CODESIGN="$CLT_PREFIX/bin/codesign"
+  XNU_HOST_MAKE_ARGS=(XCRUN="$XCRUN" PLUTIL="$CLT_PREFIX/../../bin/plutil"
+    TIGHTBEAMC=tightbeamc-not-supported BUILD_DSYM=0
     MEMORY_SIZE="$(( $(getconf _PHYS_PAGES) * $(getconf PAGE_SIZE) ))"
     SYSCTL_HW_PHYSICALCPU="$(nproc)" SYSCTL_HW_LOGICALCPU="$(nproc)"
     LD_KERNEL_LIBS="$ROOT/.cache/fakeroot/usr/local/lib/kernel/libcc_kext.a")

@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Install the toolchain the kernel step uses on a Linux host. Run once, as root:
+"""Install the toolchain the kernel step uses on a Linux host. Run once:
 
     sudo scripts/linux/setup-toolchain.py [PREFIX]      (default /opt/unixnu-linux, or $UNIXNU_TOOLCHAIN)
+
+With dependencies installed, use a writable prefix without root:
+
+    scripts/linux/setup-toolchain.py PREFIX --package-manager none
 
 It builds clang with __builtin_xnu_type_* (llvm-xnu-builtin-type.patch; xnu's kalloc_type signatures have no fallback
 without them) into PREFIX/llvm, cctools-port 1030.6.3-ld64-956.6 (ld64, libtool, nm, lipo; its master, ld64-609,
@@ -11,7 +15,7 @@ layouts that xnu's makefiles expect are under PREFIX.
 
 Host dependencies come from apt, dnf, pacman, zypper, or a preconfigured environment.
 Clang and libclang are selected through llvm-config. Libraries and build products live under PREFIX.
-The xcrun, plutil and codesign shims are installed in /usr/bin for xnu's makefiles.
+The xcrun, plutil and codesign shims are installed in PREFIX/bin for xnu's makefiles.
 """
 import argparse
 import os
@@ -231,10 +235,15 @@ def llvm(prefix, work, jobs, host):
 
 def shims(clt, xctoolchain, clang):
     (clt / 'bin').mkdir(parents=True, exist_ok=True)
-    for name, directory in [(n, clt / 'bin') for n in CLT_SHIMS] + [(n, Path('/usr/bin')) for n in USR_BIN_SHIMS]:
+    # Keep the non-toolchain shims inside the install prefix. The build commands put
+    # <prefix>/bin on PATH, so xcrun/plutil/codesign need no root-owned /usr/bin write.
+    prefix_bin = clt.parent.parent / 'bin'
+    prefix_bin.mkdir(parents=True, exist_ok=True)
+    for name, directory in [(n, clt / 'bin') for n in CLT_SHIMS] + [(n, clt / 'bin') for n in USR_BIN_SHIMS] + [(n, prefix_bin) for n in USR_BIN_SHIMS]:
         shutil.copyfile(HERE / name, directory / name)
         (directory / name).chmod(0o755)
-    env = dict(os.environ, CROSS_CLANG=str(clang), XNU_TOOLCHAIN_BIN=f'{clt / "bin"} {xctoolchain / "bin"}')
+    env = dict(os.environ, CROSS_CLANG=str(clang), XNU_TOOLCHAIN_BIN=f'{clt / "bin"} {xctoolchain / "bin"}',
+               PATH=f'{prefix_bin}:{clt / "bin"}:{xctoolchain / "bin"}:{os.environ.get("PATH", "")}')
     found = run(['xcrun', '-find', 'clang'], env=env, input='').strip()
     if found != str(clt / 'bin/clang'):
         sys.exit(f'xcrun -find clang gives {found}, not {clt / "bin/clang"}')
@@ -359,8 +368,8 @@ def main(argv=None):
     if args.jobs < 1:
         parser.error('--jobs must be positive')
     if not args.check:
-        if os.geteuid():
-            parser.error('installation requires root; use --check to inspect host dependencies')
+        if os.geteuid() and args.package_manager != 'none':
+            parser.error('installation without root requires --package-manager none')
         for command in package_commands(package_manager(args.package_manager)):
             run(command, env=dict(os.environ, DEBIAN_FRONTEND='noninteractive'))
     host = host_tools(args.llvm_config)

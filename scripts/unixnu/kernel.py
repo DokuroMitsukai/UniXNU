@@ -66,9 +66,9 @@ def linux_env(ctx):
     toolchain = Path(os.environ.get('UNIXNU_TOOLCHAIN', '/opt/unixnu-linux'))
     clt, xctoolchain = toolchain / 'CommandLineTools/usr', toolchain / 'XcodeDefault.xctoolchain/usr'
     for path in (toolchain / 'llvm/bin/clang', clt / 'bin/ld', clt / 'bin/xnu-host-cc', clt / 'libexec/migcom',
-                 xctoolchain / 'bin/iig', Path('/usr/bin/xcrun'), toolchain / 'bin/lzfse'):
+                 xctoolchain / 'bin/iig', toolchain / 'bin/xcrun', toolchain / 'bin/lzfse'):
         if not path.exists():
-            raise Error(f'{path} missing; run "sudo scripts/linux/setup-toolchain.py {toolchain}"')
+            raise Error(f'{path} missing; run "scripts/linux/setup-toolchain.py {toolchain}" (use --package-manager none for preinstalled dependencies)')
     fakeroot = ctx.tree / '.cache/fakeroot'
     return {'PATH': os.pathsep.join([str(clt / 'bin'), str(toolchain / 'bin'), os.environ.get('PATH', '')]),
             'LC_ALL': 'C', 'CLT_PREFIX': str(clt), 'XCTOOLCHAIN_PREFIX': str(xctoolchain),
@@ -76,6 +76,8 @@ def linux_env(ctx):
             'UNIXNU_SDKROOT': str(fakeroot), 'UNIXNU_SDK_VERSION': '17.0',
             'UNIXNU_PLATFORM_PATH': str(fakeroot / 'Platforms/iPhoneOS.platform'),
             'CROSS_CLANG': str(toolchain / 'llvm/bin/clang'), 'DARWIN_TRIPLE': 'arm64-apple-ios17.0',
+            # MakeInc.cmd hardcodes /usr/bin/xcrun; pass the prefix shim to make explicitly.
+            'XCRUN': str(toolchain / 'bin/xcrun'),
             'CROSS_EXTRA_FLAGS': '-mllvm -disable-atexit-based-global-dtor-lowering',
             'CCC_OVERRIDE_OPTIONS': '# +-Wno-missing-designated-field-initializers +-Wno-unused-but-set-global'}
 
