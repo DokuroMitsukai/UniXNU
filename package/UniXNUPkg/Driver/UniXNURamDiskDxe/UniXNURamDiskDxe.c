@@ -129,25 +129,23 @@ STATIC EFI_BLOCK_IO_PROTOCOL  mBlockIo = {
 };
 
 STATIC
-VOID
-PublishInitrd (
-  IN CONST VOID  *Fdt
+BOOLEAN
+ChosenInitrd (
+  IN  CONST VOID  *Fdt,
+  OUT UINT64      *Start,
+  OUT UINT64      *End
   )
 {
-  EFI_STATUS  Status;
   INT32       Chosen;
   CONST VOID  *StartProp;
   CONST VOID  *EndProp;
   INT32       StartLength;
   INT32       EndLength;
-  UINT64      Start;
-  UINT64      End;
-  EFI_HANDLE  Handle;
 
   Chosen = FdtPathOffset (Fdt, "/chosen");
   if (Chosen < 0) {
     DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: no /chosen\n"));
-    return;
+    return FALSE;
   }
 
   StartProp = FdtGetProp (Fdt, Chosen, "linux,initrd-start", &StartLength);
@@ -156,11 +154,42 @@ PublishInitrd (
       ((StartLength != 4) && (StartLength != 8)) || ((EndLength != 4) && (EndLength != 8)))
   {
     DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: no initrd in /chosen\n"));
-    return;
+    return FALSE;
   }
 
-  Start = ReadCells (StartProp, StartLength / 4);
-  End   = ReadCells (EndProp, EndLength / 4);
+  *Start = ReadCells (StartProp, StartLength / 4);
+  *End   = ReadCells (EndProp, EndLength / 4);
+  return TRUE;
+}
+
+STATIC
+VOID
+PublishInitrd (
+  IN CONST VOID  *Fdt
+  )
+{
+  EFI_STATUS  Status;
+  UINT64      Start;
+  UINT64      Size;
+  UINT64      End;
+  EFI_HANDLE  Handle;
+
+  if ((Fdt == NULL) || !ChosenInitrd (Fdt, &Start, &End)) {
+    //
+    // A legacy bootloader copies the boot image ramdisk to a fixed address and
+    // publishes nothing: use the platform range when the board declares one.
+    //
+    Start = PcdGet64 (PcdUniXNURamDiskBase);
+    Size  = PcdGet64 (PcdUniXNURamDiskSize);
+    if ((Start == 0) || (Size == 0) || (Size > MAX_UINT64 - Start)) {
+      DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: no initrd and no platform range\n"));
+      return;
+    }
+
+    End = Start + Size;
+    DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: no initrd in the FDT, platform range 0x%lx-0x%lx\n", Start, End));
+  }
+
   if ((End <= Start) || (((End - Start) % RAM_BLOCK_SIZE) != 0)) {
     DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: initrd 0x%lx-0x%lx is not a whole number of sectors\n", Start, End));
     return;
@@ -202,6 +231,7 @@ UniXNURamDiskDxeEntry (
   Hob = GetFirstGuidHob (&mEntryArgHobGuid);
   if (Hob == NULL) {
     DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: no entry argument HOB\n"));
+    PublishInitrd (NULL);
     return EFI_SUCCESS;
   }
 
@@ -212,6 +242,7 @@ UniXNURamDiskDxeEntry (
   Dtb = ReadUnaligned64 ((CONST UINT64 *)GET_GUID_HOB_DATA (Hob));
   if ((Dtb == 0) || ((Dtb & 3) != 0) || (FdtCheckHeader ((VOID *)(UINTN)Dtb) != 0)) {
     DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: x0 0x%lx is not a device tree\n", Dtb));
+    PublishInitrd (NULL);
     return EFI_SUCCESS;
   }
 

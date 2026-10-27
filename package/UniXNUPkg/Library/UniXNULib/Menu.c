@@ -15,46 +15,128 @@
 
 #define TICK_MS             100
 #define DEFAULT_ROTATE_SEC  2
+#define MAX_INPUT_DEVICES   16
 
 #ifndef SCAN_SUSPEND
 #define SCAN_SUSPEND  0x0102
 #endif
 
 //
-// Physical input = a SimpleTextIn instance that sits on a device path; the
-// ConSplitter's virtual handle has none.
+// A firmware may publish a physical keypad without connecting it to ConIn.
+// Read the physical SimpleTextIn handles
+// directly and keep the system console only as a fallback when none exists.
 //
 STATIC
 UINTN
-CountInputDevices (
-  VOID
+CollectInputDevices (
+  OUT EFI_SIMPLE_TEXT_INPUT_PROTOCOL  **Devices,
+  IN  UINTN                           MaxDevices,
+  OUT UINTN                           *PhysicalCount
   )
 {
-  EFI_STATUS  Status;
-  EFI_HANDLE  *Handles;
-  UINTN       Count;
-  UINTN       Index;
-  UINTN       Physical;
-  VOID        *Path;
+  EFI_STATUS                      Status;
+  EFI_HANDLE                      *Handles;
+  UINTN                           Count;
+  UINTN                           Index;
+  UINTN                           Found;
+  VOID                            *Path;
+  EFI_SIMPLE_TEXT_INPUT_PROTOCOL  *ConIn;
 
-  if (gST->ConIn == NULL) {
+  if ((Devices == NULL) || (PhysicalCount == NULL) || (MaxDevices == 0)) {
     return 0;
   }
+
+  Found          = 0;
+  *PhysicalCount = 0;
 
   Status = gBS->LocateHandleBuffer (ByProtocol, &gEfiSimpleTextInProtocolGuid, NULL, &Count, &Handles);
-  if (EFI_ERROR (Status)) {
-    return 0;
+  if (!EFI_ERROR (Status)) {
+    for (Index = 0; (Index < Count) && (Found < MaxDevices); Index++) {
+      if (EFI_ERROR (gBS->HandleProtocol (Handles[Index], &gEfiDevicePathProtocolGuid, &Path))) {
+        continue;
+      }
+
+      if (EFI_ERROR (gBS->HandleProtocol (Handles[Index], &gEfiSimpleTextInProtocolGuid, (VOID **)&ConIn))) {
+        continue;
+      }
+
+      if (ConIn == NULL) {
+        continue;
+      }
+
+      Devices[Found++] = ConIn;
+      (*PhysicalCount)++;
+    }
+
+    FreePool (Handles);
   }
 
-  Physical = 0;
+  if ((Found == 0) && (gST->ConIn != NULL)) {
+    Devices[Found++] = gST->ConIn;
+  }
+
+  return Found;
+}
+
+STATIC
+BOOLEAN
+ReadInputKey (
+  IN  EFI_SIMPLE_TEXT_INPUT_PROTOCOL  **Devices,
+  IN  UINTN                           Count,
+  OUT EFI_INPUT_KEY                   *Key
+  )
+{
+  UINTN  Index;
+
   for (Index = 0; Index < Count; Index++) {
-    if (!EFI_ERROR (gBS->HandleProtocol (Handles[Index], &gEfiDevicePathProtocolGuid, &Path))) {
-      Physical++;
+    if (!EFI_ERROR (Devices[Index]->ReadKeyStroke (Devices[Index], Key))) {
+      return TRUE;
     }
   }
 
-  FreePool (Handles);
-  return Physical;
+  return FALSE;
+}
+
+//
+// Blocking wait for a confirmation answer. Polling also covers firmware whose
+// physical WaitForKey event is not wired to the device.
+//
+STATIC
+BOOLEAN
+WaitForInputKey (
+  IN  EFI_SIMPLE_TEXT_INPUT_PROTOCOL  **Devices,
+  IN  UINTN                           Count,
+  OUT EFI_INPUT_KEY                   *Key
+  )
+{
+  EFI_STATUS  Status;
+  EFI_EVENT   Timer;
+  UINTN       Index;
+
+  Status = gBS->CreateEvent (EVT_TIMER, TPL_CALLBACK, NULL, NULL, &Timer);
+  if (EFI_ERROR (Status)) {
+    return FALSE;
+  }
+
+  Status = gBS->SetTimer (Timer, TimerPeriodic, EFI_TIMER_PERIOD_MILLISECONDS (TICK_MS));
+  if (!EFI_ERROR (Status)) {
+    for ( ; ;) {
+      Status = gBS->WaitForEvent (1, &Timer, &Index);
+      if (EFI_ERROR (Status)) {
+        break;
+      }
+
+      if (ReadInputKey (Devices, Count, Key)) {
+        gBS->SetTimer (Timer, TimerCancel, 0);
+        gBS->CloseEvent (Timer);
+        return TRUE;
+      }
+    }
+  }
+
+  gBS->SetTimer (Timer, TimerCancel, 0);
+  gBS->CloseEvent (Timer);
+  return FALSE;
 }
 
 STATIC
@@ -90,26 +172,28 @@ UniXNUMenuRun (
   IN BOOLEAN    Countdown
   )
 {
-  EFI_STATUS     Status;
-  EFI_EVENT      Timer;
-  EFI_EVENT      Events[2];
-  UINTN          EventCount;
-  UINTN          Signaled;
-  EFI_INPUT_KEY  Key;
-  UINTN          Selected;
-  UINTN          Previous;
-  UINTN          Index;
-  BOOLEAN        HasInput;
-  BOOLEAN        UserActive;
-  INTN           RemainingMs;
-  UINTN          RotateMs;
-  UINTN          RotateAccum;
-  INTN           LastShownSecond;
-  UINTN          Count;
+  EFI_STATUS                      Status;
+  EFI_EVENT                       Timer;
+  UINTN                           Signaled;
+  EFI_INPUT_KEY                   Key;
+  EFI_SIMPLE_TEXT_INPUT_PROTOCOL  *Inputs[MAX_INPUT_DEVICES];
+  UINTN                           InputCount;
+  UINTN                           PhysicalInputs;
+  UINTN                           Selected;
+  UINTN                           Previous;
+  UINTN                           Index;
+  BOOLEAN                         HasInput;
+  BOOLEAN                         UserActive;
+  INTN                            RemainingMs;
+  UINTN                           RotateMs;
+  UINTN                           RotateAccum;
+  INTN                            LastShownSecond;
+  UINTN                           Count;
 
-  Count    = Config->EntryCount;
-  Selected = Config->DefaultIndex;
-  HasInput = (CountInputDevices () > 0);
+  Count        = Config->EntryCount;
+  Selected     = Config->DefaultIndex;
+  InputCount   = CollectInputDevices (Inputs, MAX_INPUT_DEVICES, &PhysicalInputs);
+  HasInput     = (PhysicalInputs > 0);
 
   if (!Countdown) {
     RemainingMs = HasInput ? -1 : (INTN)Config->FallbackTimeout * 1000;
@@ -132,7 +216,7 @@ UniXNUMenuRun (
   UniXNUUiDrawStatus (
     Ui,
     1,
-    HasInput ? L"Up/Down: select    Enter: boot    1-9: boot entry    Esc: stop timer"
+    HasInput ? (CONST CHAR16 *)PcdGetPtr (PcdUniXNUMenuKeyHints)
              : L"No input device: the default entry boots when the timer ends"
     );
   if (Ui->Notice[0] != L'\0') {
@@ -159,12 +243,10 @@ UniXNUMenuRun (
     return Config->DefaultIndex;
   }
 
-  gBS->SetTimer (Timer, TimerPeriodic, EFI_TIMER_PERIOD_MILLISECONDS (TICK_MS));
-
-  EventCount = 0;
-  Events[EventCount++] = Timer;
-  if (gST->ConIn != NULL) {
-    Events[EventCount++] = gST->ConIn->WaitForKey;
+  Status = gBS->SetTimer (Timer, TimerPeriodic, EFI_TIMER_PERIOD_MILLISECONDS (TICK_MS));
+  if (EFI_ERROR (Status)) {
+    gBS->CloseEvent (Timer);
+    return Config->DefaultIndex;
   }
 
   UserActive      = FALSE;
@@ -178,34 +260,13 @@ UniXNUMenuRun (
       LastShownSecond = Second;
     }
 
-    Status = gBS->WaitForEvent (EventCount, Events, &Signaled);
+    Status = gBS->WaitForEvent (1, &Timer, &Signaled);
     if (EFI_ERROR (Status)) {
       break;
     }
 
     Previous = Selected;
-    if (Signaled == 0) {
-      if (RemainingMs > 0) {
-        RemainingMs -= TICK_MS;
-        if (RemainingMs <= 0) {
-          UniXNULog ("menu: timeout, booting default %u", (UINT32)Config->DefaultIndex);
-          Selected = Config->DefaultIndex;
-          break;
-        }
-      }
-
-      if (!UserActive && (RotateMs > 0) && (Count > 1)) {
-        RotateAccum += TICK_MS;
-        if (RotateAccum >= RotateMs) {
-          RotateAccum = 0;
-          Selected    = (Selected + 1) % Count;
-        }
-      }
-    } else {
-      if (EFI_ERROR (gST->ConIn->ReadKeyStroke (gST->ConIn, &Key))) {
-        continue;
-      }
-
+    if (ReadInputKey (Inputs, InputCount, &Key)) {
       if (!UserActive) {
         //
         // The first key takes over: no more countdown or rotation, and the
@@ -233,6 +294,23 @@ UniXNUMenuRun (
       {
         UniXNULog ("menu: enter, booting %u", (UINT32)Selected);
         break;
+      }
+    } else {
+      if (RemainingMs > 0) {
+        RemainingMs -= TICK_MS;
+        if (RemainingMs <= 0) {
+          UniXNULog ("menu: timeout, booting default %u", (UINT32)Config->DefaultIndex);
+          Selected = Config->DefaultIndex;
+          break;
+        }
+      }
+
+      if (!UserActive && (RotateMs > 0) && (Count > 1)) {
+        RotateAccum += TICK_MS;
+        if (RotateAccum >= RotateMs) {
+          RotateAccum = 0;
+          Selected    = (Selected + 1) % Count;
+        }
       }
     }
 
@@ -408,14 +486,18 @@ UniXNUMenuConfirm (
   OUT UINTN      *Choice
   )
 {
-  EFI_INPUT_KEY  Key;
-  UINTN          Index;
-  UINTN          Shown;
-  UINTN          Items;
-  CHAR16         Line[160];
+  EFI_INPUT_KEY                   Key;
+  EFI_SIMPLE_TEXT_INPUT_PROTOCOL  *Inputs[MAX_INPUT_DEVICES];
+  UINTN                           InputCount;
+  UINTN                           PhysicalInputs;
+  UINTN                           Index;
+  UINTN                           Shown;
+  UINTN                           Items;
+  CHAR16                          Line[160];
 
   *Choice = 0;
-  if ((gST->ConIn == NULL) || (CountInputDevices () == 0)) {
+  InputCount = CollectInputDevices (Inputs, MAX_INPUT_DEVICES, &PhysicalInputs);
+  if (PhysicalInputs == 0) {
     UniXNULog ("menu: confirmation needs an input device, cancelled");
     return FALSE;
   }
@@ -434,7 +516,9 @@ UniXNUMenuConfirm (
   // The press that chose the entry, and anything typed since, must not answer the question.
   //
   gBS->Stall (500000);
-  while (!EFI_ERROR (gST->ConIn->ReadKeyStroke (gST->ConIn, &Key))) {
+  for (Index = 0; Index < InputCount; Index++) {
+    while (!EFI_ERROR (Inputs[Index]->ReadKeyStroke (Inputs[Index], &Key))) {
+    }
   }
 
   for ( ; ;) {
@@ -445,12 +529,8 @@ UniXNUMenuConfirm (
       UniXNUUiDrawStatus (Ui, 1, L"");
     }
 
-    if (EFI_ERROR (gBS->WaitForEvent (1, &gST->ConIn->WaitForKey, &Index))) {
+    if (!WaitForInputKey (Inputs, InputCount, &Key)) {
       return FALSE;
-    }
-
-    if (EFI_ERROR (gST->ConIn->ReadKeyStroke (gST->ConIn, &Key))) {
-      continue;
     }
 
     if (Items > 0) {

@@ -67,6 +67,8 @@ The Android bootloader places the FAT payload in RAM and writes `/chosen/linux,i
 
 Mu-Silicium SEC preserves the incoming FDT address as a `UINT64` in the entry-argument HOB (`DAEE82E6-8090-4E72-BFB9-78C13CD4E359`). `UniXNURamDiskDxe` reads this handoff and publishes Block I/O. DiskIoDxe and the FAT driver expose `EFI_SIMPLE_FILE_SYSTEM_PROTOCOL`, allowing UniXNU to read `\EFI\UniXNU\unixnu.toml` and list its entries.
 
+A legacy bootloader such as Samsung S-Boot copies the boot image ramdisk to a fixed address and publishes no properties; it does not describe the range in the firmware memory map either. Such a platform declares the range itself: reserve it in the platform `MemoryMapLib` and set `PcdUniXNURamDiskBase` and `PcdUniXNURamDiskSize` in the platform DSC. The driver publishes that range and logs `UNIXNURAMDISK: no initrd in the FDT, platform range ...`. Both PCDs default to 0, where the FDT handoff stays the only source.
+
 If the menu appears without the configured entries, check:
 
 1. `boot/boot.json` reports a nonzero `ramdisk_bytes` value.
@@ -90,6 +92,15 @@ The RAM disk driver must be embedded in the firmware so the payload can be disco
 | `EFI_FIRMWARE_VOLUME2_PROTOCOL` | UniXNUDxe boot option registration |
 
 A board that lacks one of these services limits the stages it can run. Add the driver to the firmware volume or to the UniXNU payload before the dependent stage.
+
+The menu polls physical SimpleTextIn handles, falling back to the system console
+when none are available. This also permits input testing when a platform keypad
+has not been connected to the console splitter. This does not repair console
+routing for other UEFI applications.
+
+A platform can override `gUniXNUPkgTokenSpaceGuid.PcdUniXNUMenuKeyHints` in its
+DSC to label physical buttons rather than keyboard keys. Labels do not change
+the scan-code mappings; keep them consistent with the platform keypad driver.
 
 ## Mu-Silicium layout
 

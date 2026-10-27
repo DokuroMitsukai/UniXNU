@@ -50,3 +50,13 @@
 
   ## ASCII model name reported by menu plugins that export device files.
   gUniXNUPkgTokenSpaceGuid.PcdUniXNUDeviceModel|"UniXNU"|VOID*|0x00000004
+
+  # Platform-specific labels; this does not change the input scan codes.
+  gUniXNUPkgTokenSpaceGuid.PcdUniXNUMenuKeyHints|L"Up/Down: select    Enter: boot    1-9: boot entry    Esc: stop timer"|VOID*|0x00000005
+
+  ## Physical address and size of the payload FAT when the firmware FDT has no
+  #  /chosen linux,initrd-start and linux,initrd-end: a legacy bootloader moves
+  #  the boot image ramdisk to a fixed address and never publishes it. Both are
+  #  0 by default, which keeps the FDT handoff the only source.
+  gUniXNUPkgTokenSpaceGuid.PcdUniXNURamDiskBase|0x0|UINT64|0x00000006
+  gUniXNUPkgTokenSpaceGuid.PcdUniXNURamDiskSize|0x0|UINT64|0x00000007
