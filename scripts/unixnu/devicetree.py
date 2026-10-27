@@ -216,7 +216,12 @@ def hardware_properties(entry, handles, base=0):
             entry.strings(key)
             properties.append((key, raw))
         elif key in U32:
-            properties.append((key, struct.pack('<I', entry.scalar(key))))
+            # XNU resolves interrupt parents through AAPL,phandle, not the
+            # Linux FDT property name. Emitting "phandle" alone leaves every
+            # interrupt-parent reference unresolved.
+            name = 'AAPL,phandle' if key in ('phandle', 'linux,phandle') else key
+            if name not in {existing for existing, _ in properties}:
+                properties.append((name, struct.pack('<I', entry.scalar(key))))
         elif key in U64:
             cells = entry.cells(key)
             if len(cells) not in (1, 2):
