@@ -50,3 +50,6 @@
 
   ## ASCII model name reported by menu plugins that export device files.
   gUniXNUPkgTokenSpaceGuid.PcdUniXNUDeviceModel|"UniXNU"|VOID*|0x00000004
+
+  ## Platform-specific menu labels. This does not change scan-code handling.
+  gUniXNUPkgTokenSpaceGuid.PcdUniXNUMenuKeyHints|L"Volume: navigate    Power: select"|VOID*|0x00000005

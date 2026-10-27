@@ -67,5 +67,6 @@
   gUniXNUMenuPluginProtocolGuid ## SOMETIMES_CONSUMES
 
 [Pcd]
+  gUniXNUPkgTokenSpaceGuid.PcdUniXNUMenuKeyHints
   gUniXNUPkgTokenSpaceGuid.PcdUniXNUDebugLevel
   gUniXNUPkgTokenSpaceGuid.PcdUniXNUConfigPath

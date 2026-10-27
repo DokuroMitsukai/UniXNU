@@ -597,9 +597,9 @@ UniXNUMenuRunTools (
   );
 
 /**
-  Ask the user to confirm an entry that has a `confirm` text. Without choices only the Enter key (the power key on a device with
-  hardware keys) confirms and any other key cancels. With choices, Up/Down step through them and a final Cancel (selected first),
-  Enter picks the shown one. No input device at all cancels. Keys pressed before the question appeared are discarded.
+  Ask the user to confirm an entry that has a `confirm` text. Without choices only a confirm key (Enter, Suspend, or the board
+  power key) confirms and any other key cancels. With choices, Up/Down step through them and a final Cancel (selected first),
+  a confirm key picks the shown one. No input device at all cancels. Keys pressed before the question appeared are discarded.
 
   @retval TRUE   Confirmed.
   @retval FALSE  Cancelled.
