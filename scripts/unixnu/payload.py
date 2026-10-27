@@ -53,15 +53,63 @@ def check_native_root(kernel, arguments):
         raise Error('the native UFS root kernel lacks the linked sheng PMGR integration')
 
 
+def verify_volume(image):
+    """Refuse a volume the firmware's FAT driver would reject.
+
+    EDK II picks the FAT type from the boot sector and refuses a FAT32 volume with
+    fewer than 65525 clusters (FatPkg/EnhancedFatDxe/Init.c) or a FAT12/16 volume
+    with no root directory. mformat happily writes a FAT32 volume that small, and
+    the firmware then shows no files at all, so check the same rules here.
+    """
+    data = Path(image).read_bytes()[:512]
+    if len(data) < 512 or data[510:512] != b'\x55\xaa':
+        raise Error(f'{image} has no FAT boot sector signature')
+    sector_size = int.from_bytes(data[11:13], 'little')
+    sectors_per_cluster = data[13]
+    reserved = int.from_bytes(data[14:16], 'little')
+    fats = data[16]
+    root_entries = int.from_bytes(data[17:19], 'little')
+    total16 = int.from_bytes(data[19:21], 'little')
+    total32 = int.from_bytes(data[32:36], 'little')
+    fat16 = int.from_bytes(data[22:24], 'little')
+    fat32 = int.from_bytes(data[36:40], 'little')
+    if sector_size == 0 or sectors_per_cluster == 0 or (sectors_per_cluster & (sectors_per_cluster - 1)) != 0:
+        raise Error(f'{image}: invalid sector size or cluster size')
+    if reserved == 0 or fats == 0:
+        raise Error(f'{image}: no reserved sectors or FAT copies')
+    # Same fields EDK II reads: the 16-bit total wins, and a zero 16-bit FAT size means FAT32.
+    sectors = total16 or total32
+    if sectors == 0:
+        raise Error(f'{image}: boot sector declares no sectors')
+    fat32_type = fat16 == 0
+    sectors_per_fat = fat32 if fat32_type else fat16
+    root_dir_sectors = (root_entries * 32 + sector_size - 1) // sector_size
+    first_cluster_lba = reserved + fats * sectors_per_fat + root_dir_sectors
+    clusters = (sectors - first_cluster_lba) // sectors_per_cluster
+    if fat32_type:
+        if clusters < 65525:
+            raise Error(f'{image}: FAT32 volume has {clusters} clusters; the firmware needs at least 65525 '
+                        f'({Path(image).stat().st_size // (1024 * 1024)} MiB is too small for FAT32)')
+    else:
+        if root_entries == 0:
+            raise Error(f'{image}: FAT12/16 volume has no root directory')
+        if clusters >= 65525:
+            raise Error(f'{image}: FAT12/16 volume has {clusters} clusters; it must use FAT32')
+    return 'FAT32' if fat32_type else ('FAT12' if clusters < 4085 else 'FAT16')
+
+
 def write_volume(stage, image, label, size_mib):
     for tool_name in ('mformat', 'mcopy'):
         tool(tool_name, 'brew install mtools')
     image.unlink(missing_ok=True)
     env = dict(os.environ, MTOOLS_SKIP_CHECK='1', TZ='UTC')
     sectors = size_mib * 2048
-    run(['mformat', '-C', '-F', '-T', str(sectors), '-v', label, '-N', '53484e47', '-i', image, '::'], env=env, capture=True)
+    # No -F: mformat must pick the FAT width from the size. Forcing FAT32 writes an
+    # invalid volume below 32 MiB, which the firmware's FAT driver then refuses.
+    run(['mformat', '-C', '-T', str(sectors), '-v', label, '-N', '53484e47', '-i', image, '::'], env=env, capture=True)
     for entry in sorted(stage.iterdir()):
         run(['mcopy', '-i', image, '-s', '-Q', '-m', entry, '::/'], env=env, capture=True)
+    log(f'payload: {image.name} is {verify_volume(image)}')
 
 
 def skip_setup_seed(ctx, base, tool_path, tool_args=()):
@@ -132,6 +180,7 @@ def build(ctx, kernel=None):
         probe = (['--reset-delay', str(int(spec['entry_probe_reset_delay']))]
                  if spec.get('entry_probe_reset_delay') else ['--no-reset'])
         screen = ['--panic-screen'] if spec.get('panic_screen') else []
+        stage2 = ['--no-stage2'] if spec.get('entry_probe_no_stage2') else []
         if spec.get('entry_probe_reset_delay') and spec.get('entry_probe_reset_after'):
             # Stage 4 in place of stage 3: reset after the Nth call to SYMBOL in FUNCTION.
             probe += ['--reset-after', spec['entry_probe_reset_after'], '--in', spec.get('entry_probe_reset_in', '_arm_init'),
@@ -139,7 +188,7 @@ def build(ctx, kernel=None):
             if spec.get('entry_probe_reset_before'):
                 # At the call site, without making the call (and without the delay).
                 probe.append('--reset-before')
-        run(['python3', ctx.tree / 'scripts/patch-xnu-entry-probe.py', payloads / 'kernel.macho', *screen, *probe],
+        run(['python3', ctx.tree / 'scripts/patch-xnu-entry-probe.py', payloads / 'kernel.macho', *screen, *stage2, *probe],
             cwd=ctx.tree, env=dict(os.environ, UNIXNU_UEFI=str(ctx.uefi or '')), log_file=ctx.logs / 'payload-patch.log')
     if trust:
         shutil.copyfile(trust, payloads / 'kernel.macho.trustcache')
