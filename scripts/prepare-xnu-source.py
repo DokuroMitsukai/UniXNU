@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -23,8 +25,18 @@ def fetch(url):
     request = urllib.request.Request(url, headers={'User-Agent': 'unixnu-prepare-xnu-source'})
     if TOKEN and urllib.parse.urlsplit(url).hostname in ('api.github.com', 'raw.githubusercontent.com'):
         request.add_header('Authorization', f'Bearer {TOKEN}')
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return response.read()
+    # GitHub's raw host and a shared CI egress occasionally time out during
+    # the TLS handshake. Retry transient failures; do not retry a definitive
+    # HTTP client error other than throttling.
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return response.read()
+        except (TimeoutError, urllib.error.URLError) as error:
+            throttled = isinstance(error, urllib.error.HTTPError) and error.code == 429
+            if (isinstance(error, urllib.error.HTTPError) and not throttled) or attempt == 3:
+                raise
+            time.sleep(2 ** attempt)
 
 
 def restore(entry, destination=DESTINATION, tag=TAG):
