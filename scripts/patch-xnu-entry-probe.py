@@ -51,6 +51,7 @@ TIMEBASE = 19200000
 
 PAINT = """
   ldr x1, [{args}, #0x28]
+  bic x1, x1, #3
   ldr x2, [{args}, #0x38]
   ldr x3, [{args}, #0x48]
   mul x2, x2, x3
@@ -361,6 +362,7 @@ def main():
     parser.add_argument('--reset-before', action='store_true', help='reset at the call site before invoking SYMBOL (requires --reset-after)')
     parser.add_argument('--panic-screen', action='store_true', help='draw panic() messages on the screen')
     parser.add_argument('--no-reset', action='store_true', help='no reset probe at all')
+    parser.add_argument('--no-stage2', action='store_true', help='do not paint the magenta bar; leaves its cave for the panic screen')
     parser.add_argument('--occurrence', type=int, default=1, help='which call to SYMBOL (1 = first)')
     parser.add_argument('--in', dest='function', default='_arm_init', help='function that makes the call (default _arm_init)')
     args = parser.parse_args()
@@ -382,8 +384,9 @@ def main():
             raise SystemExit(f'Padding at {va:#x} is not empty')
 
     # (site, cave stage, symbols the cave is linked with)
-    sites = [(ENTRY_VA, 1, {'target': START_FIRST_CPU}),
-             (MMU_ENABLE_VA, 2, {'target': MMU_ENABLE_VA + 4})]
+    sites = [(ENTRY_VA, 1, {'target': START_FIRST_CPU})]
+    if not args.no_stage2:
+        sites.append((MMU_ENABLE_VA, 2, {'target': MMU_ENABLE_VA + 4}))
     if args.no_reset:
         description = 'no reset probe'
     elif args.reset_after:
@@ -424,7 +427,8 @@ def main():
         struct.pack_into('<I', data, file_offset(common), branch(common, common_entry))
         description += f', panic screen ({len(code):#x} bytes at {entry:#x}; common funnel at {common:#x})'
     args.kernel.write_bytes(data)
-    print(f'patched {args.kernel.name}: stage 1 blue bar, stage 2 magenta bar, {description}')
+    bars = 'stage 1 blue bar' + (', stage 2 magenta bar' if not args.no_stage2 else ', no stage 2 magenta bar')
+    print(f'patched {args.kernel.name}: {bars}, {description}')
 
 if __name__ == '__main__':
     main()

@@ -213,6 +213,7 @@ def build(ctx, kernel=None):
         probe = (['--reset-delay', str(int(spec['entry_probe_reset_delay']))]
                  if spec.get('entry_probe_reset_delay') else ['--no-reset'])
         screen = ['--panic-screen'] if spec.get('panic_screen') else []
+        stage2 = ['--no-stage2'] if spec.get('entry_probe_no_stage2') else []
         if spec.get('entry_probe_reset_delay') and spec.get('entry_probe_reset_after'):
             # Stage 4 in place of stage 3: reset after the Nth call to SYMBOL in FUNCTION.
             probe += ['--reset-after', spec['entry_probe_reset_after'], '--in', spec.get('entry_probe_reset_in', '_arm_init'),
@@ -220,7 +221,7 @@ def build(ctx, kernel=None):
             if spec.get('entry_probe_reset_before'):
                 # At the call site, without making the call (and without the delay).
                 probe.append('--reset-before')
-        run(['python3', ctx.tree / 'scripts/patch-xnu-entry-probe.py', payloads / 'kernel.macho', *screen, *probe],
+        run(['python3', ctx.tree / 'scripts/patch-xnu-entry-probe.py', payloads / 'kernel.macho', *screen, *stage2, *probe],
             cwd=ctx.tree, env=dict(os.environ, UNIXNU_UEFI=str(ctx.uefi or '')), log_file=ctx.logs / 'payload-patch.log')
     if compression:
         if compression not in ('uefi', True):

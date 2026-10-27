@@ -11,6 +11,7 @@ import hashlib
 import json
 import shutil
 import struct
+import subprocess
 import tempfile
 import zlib
 from pathlib import Path
@@ -49,7 +50,14 @@ def patch_dtb(dtb, nodes, scratch):
     work = scratch / 'device.dtb'
     work.write_bytes(dtb)
     for node in nodes:
-        run([fdtput, '-c', work, node['path']], capture=True)
+        # fdtput -c refuses to touch a node that already exists (FDT_ERR_EXISTS);
+        # boards commonly patch the status of existing SPI/touch nodes.
+        exists = subprocess.run(
+            [fdtget, '-l', str(work), node['path']],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        ).returncode == 0
+        if not exists:
+            run([fdtput, '-c', work, node['path']], capture=True)
         for prop in node.get('props', []):
             values = prop['value'] if isinstance(prop['value'], list) else [prop['value']]
             run([fdtput, '-t', prop.get('type', 's'), work, node['path'], prop['name'], *[str(v) for v in values]], capture=True)
@@ -95,15 +103,6 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
     with tempfile.TemporaryDirectory(prefix='unixnu-bootimg-') as scratch_name:
         scratch = Path(scratch_name)
         shim = compile_shim(uefi, base, size, requires_header, scratch)
-        tree = b''
-        if append_dtb:
-            tree = patch_dtb(Path(dtb).read_bytes(), ctx.board.get('bootimg', {}).get('dtb_node', []), scratch)
-            if tree[:4] != b'\xd0\x0d\xfe\xed' or struct.unpack_from('>I', tree, 4)[0] != len(tree):
-                raise Error('invalid compiled device tree')
-        combined = shim + firmware
-        kernel = (gzip.compress(combined, mtime=0) if compression == 'gzip' else combined) + tree
-        kernel_path = scratch / f'Image{".gz" if compression == "gzip" else ""}{"-dtb" if append_dtb else ""}'
-        kernel_path.write_bytes(kernel)
         if ramdisk:
             ramdisk_path = Path(ramdisk)
             if not ramdisk_path.is_file():
@@ -111,6 +110,27 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
         else:
             ramdisk_path = scratch / 'ramdisk'
             ramdisk_path.write_bytes(b'')
+        ramdisk_size = ramdisk_path.stat().st_size
+        nodes = list(ctx.board.get('bootimg', {}).get('dtb_node', []))
+        if ramdisk_size:
+            initrd_start = image['base'] + image.get('ramdisk_offset', 0x01000000)
+            initrd_end = initrd_start + ramdisk_size
+            nodes.append({
+                'path': '/chosen',
+                'props': [
+                    {'name': 'linux,initrd-start', 'type': 'x', 'value': ['0x0', f'{initrd_start:#x}']},
+                    {'name': 'linux,initrd-end', 'type': 'x', 'value': ['0x0', f'{initrd_end:#x}']},
+                ],
+            })
+        tree = b''
+        if append_dtb:
+            tree = patch_dtb(Path(dtb).read_bytes(), nodes, scratch)
+            if tree[:4] != b'\xd0\x0d\xfe\xed' or struct.unpack_from('>I', tree, 4)[0] != len(tree):
+                raise Error('invalid compiled device tree')
+        combined = shim + firmware
+        kernel = (gzip.compress(combined, mtime=0) if compression == 'gzip' else combined) + tree
+        kernel_path = scratch / f'Image{".gz" if compression == "gzip" else ""}{"-dtb" if append_dtb else ""}'
+        kernel_path.write_bytes(kernel)
         command = ['python3', mkbootimg, '--kernel', kernel_path, '--ramdisk', ramdisk_path, '-o', out]
         for key in MKBOOTIMG_FLAGS:
             if key in image:
@@ -118,8 +138,10 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
         run(command, capture=True)
         report = verify(out, combined, tree, ramdisk_path, image, compression)
     report.update(image_sha256=sha256_file(out), image_bytes=out.stat().st_size, fd_sha256=sha256_file(fd),
-                  dtb_sha256=sha256_file(dtb) if append_dtb else None, shim_bytes=len(shim),
-                  kernel_compression=compression, dtb_appended=append_dtb, hardware_tested=False)
+                  dtb_sha256=sha256_file(dtb) if append_dtb else None,
+                  patched_dtb_sha256=hashlib.sha256(tree).hexdigest() if tree else None,
+                  shim_bytes=len(shim), kernel_compression=compression,
+                  dtb_appended=append_dtb, hardware_tested=False)
     (out.parent / 'boot.json').write_text(json.dumps(report, indent=2) + '\n')
     log(f'bootimg: {out} ({out.stat().st_size} bytes)')
     return out
@@ -128,11 +150,15 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
 def verify(path, combined, tree, ramdisk_path, image, compression='gzip'):
     """Unpack the image and compare every part with its input."""
     data = Path(path).read_bytes()
-    kernel_size, kernel_address, ramdisk_size, _, second_size, _, tags, page, version, _ = struct.unpack_from('<10I', data, 8)
+    kernel_size, kernel_address, ramdisk_size, ramdisk_address, second_size, _, tags, page, version, _ = struct.unpack_from('<10I', data, 8)
     if data[:8] != b'ANDROID!' or second_size or version != image['header_version'] or page != image['pagesize']:
         raise Error('boot image header does not match the requested parameters')
     if kernel_address != image['base'] + image['kernel_offset'] or tags != image['base'] + image['tags_offset']:
         raise Error('boot image load addresses do not match the requested offsets')
+    # mkbootimg writes a zero ramdisk address when no ramdisk is supplied.
+    expected_ramdisk_address = (image['base'] + image.get('ramdisk_offset', 0x01000000)) if ramdisk_size else 0
+    if ramdisk_address != expected_ramdisk_address:
+        raise Error('boot image ramdisk load address does not match the requested offset')
     kernel = data[page:page + kernel_size]
     if compression == 'gzip':
         unpacker = zlib.decompressobj(16 + zlib.MAX_WBITS)
@@ -144,4 +170,5 @@ def verify(path, combined, tree, ramdisk_path, image, compression='gzip'):
     if data[start:start + ramdisk_size] != Path(ramdisk_path).read_bytes():
         raise Error('ramdisk bytes differ')
     return {'kernel_sha256': hashlib.sha256(kernel).hexdigest(), 'ramdisk_bytes': ramdisk_size,
-            'header_version': version, 'kernel_address': hex(kernel_address), 'tags_address': hex(tags)}
+            'ramdisk_address': hex(ramdisk_address), 'header_version': version,
+            'kernel_address': hex(kernel_address), 'tags_address': hex(tags)}

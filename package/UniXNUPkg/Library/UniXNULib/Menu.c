@@ -22,6 +22,14 @@
 #endif
 
 //
+// Some boards report the hardware power key as a separate scan code.
+// The gta4l ButtonsDxe uses 0x0080; a board can override this default.
+//
+#ifndef SCAN_HW_POWER
+#define SCAN_HW_POWER  0x0080
+#endif
+
+//
 // A firmware may publish a physical keypad without connecting it to ConIn.
 // Read the physical SimpleTextIn handles
 // directly and keep the system console only as a fallback when none exists.
@@ -290,7 +298,8 @@ UniXNUMenuRun (
         UniXNULog ("menu: key %c, booting %u", Key.UnicodeChar, (UINT32)Selected);
         break;
       } else if ((Key.UnicodeChar == CHAR_CARRIAGE_RETURN) || (Key.UnicodeChar == CHAR_LINEFEED) ||
-                 (Key.UnicodeChar == L' ') || (Key.ScanCode == SCAN_RIGHT) || (Key.ScanCode == SCAN_SUSPEND))
+                 (Key.UnicodeChar == L' ') || (Key.ScanCode == SCAN_RIGHT) ||
+                 (Key.ScanCode == SCAN_SUSPEND) || (Key.ScanCode == SCAN_HW_POWER))
       {
         UniXNULog ("menu: enter, booting %u", (UINT32)Selected);
         break;
@@ -545,7 +554,13 @@ UniXNUMenuConfirm (
       }
     }
 
-    if ((Key.UnicodeChar == CHAR_CARRIAGE_RETURN) || (Key.UnicodeChar == CHAR_LINEFEED)) {
+    //
+    // The hardware power key is reported as Enter on some devices and as
+    // 0x0080 by the gta4l button driver.
+    //
+    if ((Key.UnicodeChar == CHAR_CARRIAGE_RETURN) || (Key.UnicodeChar == CHAR_LINEFEED) ||
+        (Key.ScanCode == SCAN_SUSPEND) || (Key.ScanCode == SCAN_HW_POWER))
+    {
       if (Items > 0) {
         if (Shown + 1 == Items) {
           return FALSE;
