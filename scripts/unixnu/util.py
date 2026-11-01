@@ -20,16 +20,20 @@ SECRET_QUERY = re.compile(
     r'user|password|secret)=)([^&\s"\']+)')
 URL_PASSWORD = re.compile(r'(?i)([a-z][a-z0-9+.-]*://)([^/@\s:]+):([^/@\s]+)@')
 URL_USER = re.compile(r'(?i)([a-z][a-z0-9+.-]*://)([^/@\s]+)@')
+SEED_ARG = re.compile(r'(?i)(--unique-chip-id\s+)(\S+)')
+SEED_ASSIGN = re.compile(r'(?i)(\b(?:UNIXNU_)?unique[_-]?chip[_-]?id\s*[:=]\s*["\']?)([^\s,;&"\']+)')
 ASSIGNMENT = re.compile(r'(?i)(\b(?:token|password|passwd|secret|api[_-]?key|authorization)\s*[:=]\s*)([^\s,;&"\']+)')
 
 
 def redact(text):
-    """Mask token-like and signed-URL values before a command or log is printed."""
+    """Mask token-like, signed-URL and platform-seed values before a command or log is printed."""
     text = TOKEN.sub('<redacted>', text)
     text = BEARER.sub(r'\1<redacted>', text)
     text = SECRET_QUERY.sub(r'\1<redacted>', text)
     text = URL_PASSWORD.sub(r'\1<redacted>@', text)
     text = URL_USER.sub(r'\1<redacted>@', text)
+    text = SEED_ARG.sub(r'\1<redacted>', text)
+    text = SEED_ASSIGN.sub(r'\1<redacted>', text)
     return ASSIGNMENT.sub(r'\1<redacted>', text)
 
 

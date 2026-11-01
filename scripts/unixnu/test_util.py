@@ -11,6 +11,7 @@ from . import util
 TOKEN = 'ghp_' + 'a' * 36
 SIGNED = ('https://cdn.example.invalid/restore.ipsw?token=secretvalue&sig=signaturevalue'
           '&ok=1')
+SEED = '0x1122334455667788'
 
 
 class RedactTests(unittest.TestCase):
@@ -35,6 +36,16 @@ class RedactTests(unittest.TestCase):
         text = util.redact('token=abc password:def api_key=ghi')
         for secret in ('abc', 'def', 'ghi'):
             self.assertNotIn(secret, text)
+
+    def test_platform_seed(self):
+        for text in (f'--unique-chip-id {SEED}',
+                     f'--unique-chip-id={SEED}',
+                     f'UNIXNU_UNIQUE_CHIP_ID={SEED}',
+                     f'unique_chip_id = "{SEED}"'):
+            result = util.redact(text)
+            self.assertNotIn(SEED, result)
+            self.assertIn('<redacted>', result)
+        self.assertNotIn(SEED, util.redact(f'--unique-chip-id {SEED} --other value'))
 
 
 class RunTests(unittest.TestCase):
@@ -70,7 +81,8 @@ class RunTests(unittest.TestCase):
         stdout = io.StringIO()
         with patch.object(util.subprocess, 'run', return_value=SimpleNamespace(returncode=0)):
             with redirect_stdout(stdout):
-                util.run(['tool', '--url', SIGNED])
+                util.run(['tool', '--url', SIGNED, '--unique-chip-id', SEED])
         output = stdout.getvalue()
         self.assertNotIn('secretvalue', output)
+        self.assertNotIn(SEED, output)
         self.assertIn('<redacted>', output)
