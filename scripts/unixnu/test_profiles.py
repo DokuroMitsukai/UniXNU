@@ -68,8 +68,12 @@ class OsOverrideTests(unittest.TestCase):
             '[payload]\nroot_policies = ["profile"]\n')
         device = root / 'device'
         device.mkdir()
+        (device / 'configs').mkdir()
+        (device / 'configs/gta4l_defconfig').write_text('CONFIG_XNU_NATIVE_PAN=n\n')
         board = (
             '[board]\nsoc_source = "sm6115"\nos_profile = "' + PROFILE + '"\n'
+            '[package]\nunixnu = "../UniXNU"\nboot_partition_bytes = 100663296\n'
+            '[package.defconfig]\n"' + PROFILE + '" = "gta4l_defconfig"\n'
             '[kernel]\ndefconfig = "gta4l_defconfig"\narchives = ["board"]\n'
             '[payload]\nvolume = "GTA4LESP"\n'
             '[os_overrides."' + PROFILE + '"]\nremove = ["kernel.config_fragments", "payload.root_policies"]\n'
@@ -108,6 +112,61 @@ class OsOverrideTests(unittest.TestCase):
                 '[os]\nname = "' + PROFILE + '"\narch = "arm64e"\n')
             with patch.object(feeds, 'resolve_soc', return_value=SimpleNamespace(path=soc)):
                 with self.assertRaisesRegex(Error, 'arch is arm64e'):
+                    profiles.load(ctx)
+
+    def test_installed_profile_outside_the_package_contract_is_rejected(self):
+        with TemporaryDirectory() as directory:
+            ctx, soc = self.build(Path(directory))
+            foreign = Path(directory) / 'profiles/os/ipados-26.5.2-23F84'
+            foreign.mkdir()
+            (foreign / 'profile.toml').write_text('[os]\nname = "ipados-26.5.2-23F84"\narch = "arm64"\n')
+            ctx.args.os = '26'
+            with patch.object(feeds, 'resolve_soc', side_effect=AssertionError('resolved the SoC before validation')):
+                with self.assertRaisesRegex(Error, 'does not package that OS profile'):
+                    profiles.load(ctx)
+
+    def test_path_like_os_profile_is_rejected(self):
+        with TemporaryDirectory() as directory:
+            ctx, soc = self.build(Path(directory))
+            ctx.raw_board['board']['os_profile'] = '../' + PROFILE
+            with patch.object(feeds, 'resolve_soc', side_effect=AssertionError('resolved the SoC before validation')):
+                with self.assertRaisesRegex(Error, 'must be a profile directory name'):
+                    profiles.load(ctx)
+
+    def test_missing_profile_file_is_rejected(self):
+        with TemporaryDirectory() as directory:
+            ctx, soc = self.build(Path(directory))
+            (Path(directory) / 'profiles/os' / PROFILE / 'profile.toml').unlink()
+            with patch.object(feeds, 'resolve_soc', side_effect=AssertionError('resolved the SoC before validation')):
+                with self.assertRaisesRegex(Error, 'is not installed'):
+                    profiles.load(ctx)
+
+    def test_missing_mapped_defconfig_is_rejected(self):
+        with TemporaryDirectory() as directory:
+            ctx, soc = self.build(Path(directory))
+            ctx.raw_board['package']['defconfig'][PROFILE] = 'missing_defconfig'
+            with patch.object(feeds, 'resolve_soc', side_effect=AssertionError('resolved the SoC before validation')):
+                with self.assertRaisesRegex(Error, 'configs/missing_defconfig is missing'):
+                    profiles.load(ctx)
+
+    def test_override_cannot_change_the_package_contract(self):
+        with TemporaryDirectory() as directory:
+            ctx, soc = self.build(Path(directory))
+            with (Path(directory) / 'device/board.toml').open('a') as stream:
+                stream.write('[os_overrides."' + PROFILE + '".package]\nboot_partition_bytes = 1\n')
+            ctx.raw_board = tomllib.loads((Path(directory) / 'device/board.toml').read_text())
+            with patch.object(feeds, 'resolve_soc', return_value=SimpleNamespace(path=soc)):
+                result = profiles.load(ctx)
+            self.assertEqual(result['package']['boot_partition_bytes'], 100663296)
+
+    def test_override_cannot_change_the_profile_identity(self):
+        with TemporaryDirectory() as directory:
+            ctx, soc = self.build(Path(directory))
+            with (Path(directory) / 'device/board.toml').open('a') as stream:
+                stream.write('[os_overrides."' + PROFILE + '".os]\nname = "ipados-26.5.2-23F84"\n')
+            ctx.raw_board = tomllib.loads((Path(directory) / 'device/board.toml').read_text())
+            with patch.object(feeds, 'resolve_soc', return_value=SimpleNamespace(path=soc)):
+                with self.assertRaisesRegex(Error, 'resolved \[os\] name'):
                     profiles.load(ctx)
 
 

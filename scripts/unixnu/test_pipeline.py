@@ -180,6 +180,23 @@ class ReleaseTests(unittest.TestCase):
             ctx = ReleaseContext(Path(directory))
             self.assertEqual(self.exercise(ctx, fail='build'), ['deps', 'ipsw', 'preflight', 'build'])
 
+    def test_every_step_failure_stops_later_steps(self):
+        expected = {'deps': ['deps'],
+                    'ipsw': ['deps', 'ipsw'],
+                    'preflight': ['deps', 'ipsw', 'preflight'],
+                    'pack': ['deps', 'ipsw', 'preflight', 'build', 'pack'],
+                    'manifest': ['deps', 'ipsw', 'preflight', 'build', 'pack', 'manifest'],
+                    'verify': ['deps', 'ipsw', 'preflight', 'build', 'pack', 'manifest', 'verify']}
+        for fail, calls in expected.items():
+            with self.subTest(fail=fail), TemporaryDirectory() as directory:
+                ctx = ReleaseContext(Path(directory))
+                self.assertEqual(self.exercise(ctx, fail=fail), calls)
+
+    def test_check_failure_stops_before_build(self):
+        with TemporaryDirectory() as directory:
+            ctx = ReleaseContext(Path(directory), check=True)
+            self.assertEqual(self.exercise(ctx, fail='preflight'), ['deps', 'ipsw', 'preflight'])
+
 
 if __name__ == '__main__':
     unittest.main()
