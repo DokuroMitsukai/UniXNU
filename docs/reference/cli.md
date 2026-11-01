@@ -73,6 +73,14 @@ unixnu status [--json]
 
 Prints the device, output path, profile roots, component scope, source revisions, local overrides, and patch order. `--json` emits `schema_version`, `device`, `name`, `output`, `configuration`, `config_path`, `configured`, `profiles`, `configuration_sources`, `board`, `components`, `modules`, and `patch_order`. Status reads cached or local SoC sources; run `fetch` to obtain a missing source.
 
+### release
+
+```
+unixnu release [--os VERSION] [--no-deps] [--check]
+```
+
+Runs the fixed packaging steps of a device repository: deps, preflight, patches, build, pack and verify. The deps step fetches sources and the IPSW members; `--no-deps` skips it. `--check` resolves the selected profile, writes its configuration and lists the patch series, then stops before any build step. The pack step uses `[bootimg] dtb`, relative to the assembled tree, and the verify step writes `package.manifest.json` beside the outputs, checks the recorded hashes, the 1000-byte kernel command-line limit and the optional `[package] boot_partition_bytes` limit. Every device repository carries the same `scripts/package.sh`, which only reads `[package] unixnu` and runs this command.
+
 ### clean
 
 ```
@@ -86,6 +94,7 @@ Removes `tree`, `logs`, `kernel`, `package`, `boot` and `edk2-conf` under the bo
 | Option | Meaning |
 | --- | --- |
 | `-D DIR`, `--device DIR` | Device repository |
+| `--os VERSION` | OS profile: `17`, `26`, `27` or a `profiles/os` directory name |
 | `--out DIR` | Output root |
 | `-j N`, `--jobs N` | Parallel jobs |
 | `--local DIR` | Local tree with this repository's layout |
