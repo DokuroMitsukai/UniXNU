@@ -112,8 +112,13 @@ class Ipsw:
             log(f'ipsw: local {path}')
             self.stream = path.open('rb')
         self.zip = zipfile.ZipFile(self.stream)
-        self.manifest = plistlib.loads(self.zip.read('BuildManifest.plist'))
-        self.identity = self._identity()
+        try:
+            self.manifest = plistlib.loads(self.zip.read('BuildManifest.plist'))
+            self.identity = self._identity()
+        except BaseException:
+            self.zip.close()
+            self.stream.close()
+            raise
         self.cache = ctx.out_root / 'ipsw' / self.config['build']
 
     def _identity(self):

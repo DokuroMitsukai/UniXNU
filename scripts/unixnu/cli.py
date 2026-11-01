@@ -53,7 +53,7 @@ def parser():
     f.add_argument('--update', action='store_true', help='ignore the lock and move to the newest ref')
     sub.add_parser('tree', parents=[c], help='assemble the build tree')
     b = sub.add_parser('build', parents=[c], help='build kernel, package and firmware')
-    b.add_argument('steps', nargs='*', choices=STEPS + OPTIONAL_STEPS + ('all', 'prelink'), default=['all'])
+    b.add_argument('steps', nargs='*', help='build steps (default: all)')
     for step in STEPS + OPTIONAL_STEPS + ('prelink',):
         shortcut = sub.add_parser(step, parents=[c], help=f'alias for build {step}')
         shortcut.set_defaults(steps=[step])
@@ -141,7 +141,11 @@ def cmd_fetch(ctx):
 
 def cmd_build(ctx):
     ctx.refuse_example()
-    steps = ctx.args.steps
+    steps = ctx.args.steps or ['all']
+    unknown = [step for step in steps if step not in STEPS + OPTIONAL_STEPS + ('all', 'prelink')]
+    if unknown:
+        raise Error(f'unknown build step(s): {", ".join(unknown)}; choose from '
+                    f'{", ".join(STEPS + OPTIONAL_STEPS + ("all", "prelink"))}')
     if 'all' in steps:
         steps = list(STEPS)
     if 'userdata' in steps:

@@ -1,6 +1,7 @@
 """Small helpers shared by the build driver."""
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -9,6 +10,27 @@ from pathlib import Path
 
 class Error(Exception):
     """A user-facing failure; the command line prints it without a traceback."""
+
+
+TOKEN = re.compile(r'(?i)\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,})\b')
+BEARER = re.compile(r'(?i)\b(Bearer\s+)[A-Za-z0-9._~+/=-]+')
+SECRET_QUERY = re.compile(
+    r'(?i)([?&](?:token|access_token|id_token|api_key|apikey|key|sig|signature|credential|'
+    r'x-amz-signature|x-amz-credential|x-amz-security-token|googleaccessid|policy|expires|'
+    r'user|password|secret)=)([^&\s"\']+)')
+URL_PASSWORD = re.compile(r'(?i)([a-z][a-z0-9+.-]*://)([^/@\s:]+):([^/@\s]+)@')
+URL_USER = re.compile(r'(?i)([a-z][a-z0-9+.-]*://)([^/@\s]+)@')
+ASSIGNMENT = re.compile(r'(?i)(\b(?:token|password|passwd|secret|api[_-]?key|authorization)\s*[:=]\s*)([^\s,;&"\']+)')
+
+
+def redact(text):
+    """Mask token-like and signed-URL values before a command or log is printed."""
+    text = TOKEN.sub('<redacted>', text)
+    text = BEARER.sub(r'\1<redacted>', text)
+    text = SECRET_QUERY.sub(r'\1<redacted>', text)
+    text = URL_PASSWORD.sub(r'\1<redacted>@', text)
+    text = URL_USER.sub(r'\1<redacted>@', text)
+    return ASSIGNMENT.sub(r'\1<redacted>', text)
 
 
 def log(message):
@@ -48,18 +70,19 @@ def run(command, *, cwd=None, env=None, log_file=None, capture=False):
     """Run a command, echoing it. With log_file the output goes there and the tail is shown on failure."""
     command = [str(part) for part in command]
     if not capture:
-        print('+ ' + ' '.join(command), flush=True)
+        print('+ ' + redact(' '.join(command)), flush=True)
     if capture:
         result = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True)
         if result.returncode:
-            raise Error(f'{command[0]} failed ({result.returncode}): {result.stderr.strip() or result.stdout.strip()}')
+            detail = redact(result.stderr.strip() or result.stdout.strip())
+            raise Error(f'{command[0]} failed ({result.returncode}): {detail}')
         return result.stdout
     if log_file:
         Path(log_file).parent.mkdir(parents=True, exist_ok=True)
         with Path(log_file).open('w') as stream:
             result = subprocess.run(command, cwd=cwd, env=env, stdout=stream, stderr=subprocess.STDOUT)
         if result.returncode:
-            tail = Path(log_file).read_text(errors='replace').splitlines()[-30:]
+            tail = [redact(line) for line in Path(log_file).read_text(errors='replace').splitlines()[-30:]]
             print('\n'.join(tail), file=sys.stderr)
             raise Error(f'{command[0]} failed ({result.returncode}); full log: {log_file}')
         return ''

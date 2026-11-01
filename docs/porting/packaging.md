@@ -52,6 +52,13 @@ Any other `unixnu` option (`--uefi`, `--kernelcache`, `--dtb`, `--out`, `-j`) is
 Local inputs that are not in a repository come from `unixnu.local.toml`.
 The platform seed (`--unique-chip-id HEX` or `UNIXNU_UNIQUE_CHIP_ID`) and the firmware checkout (`--uefi DIR` or `UNIXNU_UEFI`) are not stored in any repository; the firmware step passes `UNIXNU_UEFI` to the board's preflight scripts.
 
+`unixnu release` accepts local module overrides (`--local`, `--local-module`,
+the device `local.toml` and `feeds.toml` local entries); it does not reject
+them. `unixnu status` marks each local source and the package manifest records
+the module's Git HEAD, or `null` for a directory outside Git. A release built
+from overrides is therefore not the same as one resolved from the locks; record
+the overrides with the result.
+
 ## On GitHub
 
 The device repository carries `.github/workflows/package.yml`. It runs
