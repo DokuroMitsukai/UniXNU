@@ -24,6 +24,8 @@ class LinuxEnvironmentTests(unittest.TestCase):
                 ctx = SimpleNamespace(tree=prefix / 'tree')
                 env = linux_env(ctx)
                 self.assertIn(str(prefix / 'bin'), env['PATH'].split(os.pathsep))
+                self.assertEqual(env['DARWIN_TRIPLE'], 'arm64-apple-ios17.0')
+                self.assertNotIn('ptrauth', env['CROSS_EXTRA_FLAGS'])
                 (prefix / 'bin/xcrun').unlink()
                 with self.assertRaisesRegex(Error, 'bin/xcrun missing'):
                     linux_env(ctx)
