@@ -1515,7 +1515,7 @@ with (fixture / 'gdb-stderr.log').open('w') as errors:
             if args.system_registers:
                 target = feature('target.xml')
                 report['system_registers'] = {}
-                wanted = {'TCR_EL1', 'TTBR0_EL1', 'TTBR1_EL1', 'SCTLR_EL1', 'CNTFRQ_EL0',
+                wanted = {'TCR_EL1', 'TTBR0_EL1', 'TTBR1_EL1', 'SCTLR', 'SCTLR_EL1', 'CNTFRQ_EL0',
                           'ESR_EL1', 'FAR_EL1', 'ELR_EL1', 'SPSR_EL1', 'ID_AA64MMFR1_EL1', 'ID_AA64MMFR0_EL1', 'MIDR_EL1'}
                 if process_plan:
                     wanted.add('TPIDR_EL1')
@@ -1525,7 +1525,13 @@ with (fixture / 'gdb-stderr.log').open('w') as errors:
                         if register.attrib['name'] in wanted:
                             raw = packet(f'p{int(register.attrib["regnum"]):x}')
                             value = int.from_bytes(bytes.fromhex(raw), 'little')
-                            report['system_registers'][register.attrib['name']] = hex(value)
+                            name = register.attrib['name']
+                            # QEMU 8.2 exposes the current-EL SCTLR as "SCTLR";
+                            # at the EL1 kernel stop that is SCTLR_EL1.  Keep an
+                            # explicit SCTLR_EL1 when the stub provides one.
+                            if name == 'SCTLR' and 'SCTLR_EL1' not in report['system_registers']:
+                                name = 'SCTLR_EL1'
+                            report['system_registers'][name] = hex(value)
                 if followed_display and followed_display['observed']:
                     followed_display['actual_process'] = process_identity()
                 if args.process_layout_plan:
