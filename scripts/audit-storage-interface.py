@@ -108,6 +108,56 @@ if args.derive:
     class_size_value = derive['compiled_public_class_size']
     sdk_version = derive.get('platform_header_sdk_version', args.sdk_version or '17.0')
     platform_header_sha256 = derive['platform_header_sha256']
+    # A cached derive must not be able to move the vtable, a method target or
+    # the metaclass.  Re-check every recorded address against the candidate.
+    native = np.macho(kernel)
+    exports = np.exports(kernel, native)
+    by_name = {name: va for va, names in exports.items() for name in names}
+    extents = [e for e in plan['extents'] if e['module'] == 'com.apple.iokit.IOStorageFamily']
+    const = next(e for e in extents if e['segment'] == '__DATA_CONST')
+    text = next(e for e in extents if e['segment'] == '__TEXT_EXEC')
+
+    def read(va, length):
+        at = np.backed_offset(native['segments'], va, length, len(kernel))
+        return kernel[at:at + length]
+
+    require(const['va'] <= table < const['va'] + const['size'],
+            'Derived vtable is outside the storage __DATA_CONST extent')
+    require(len(methods_rows) == 190, 'Derived method row count changed')
+    for index, row in enumerate(methods_rows):
+        require(row['slot'] == index, 'Derived method slots are not contiguous')
+        at = np.backed_offset(native['segments'], table + 16 + index * 8, 8, len(kernel))
+        actual = struct.unpack_from('<Q', kernel, at)[0]
+        require(actual == int(row['candidate_target'], 16),
+                f'Derived method slot {index} does not match the candidate')
+    function = int(methods_rows[7]['candidate_target'], 16)
+    a, add, ret = struct.unpack('<3I', read(function, 12))
+    require(a & 0x9f00001f == 0x90000000 and add & 0xffc003ff == 0x91000000 and
+            ret == 0xd65f03c0, 'Derived metaclass getter is not qualified')
+    immediate = ((a >> 5 & 0x7ffff) << 2) | (a >> 29 & 3)
+    if immediate & 0x100000:
+        immediate -= 0x200000
+    derived_meta = (function & ~4095) + immediate * 4096 + (add >> 10 & 4095)
+    require(derived_meta == meta, 'Derived metaclass does not match the candidate getter')
+    require(service_meta == by_name['__ZN9IOService10gMetaClassE'],
+            'Derived IOService metaclass does not match the candidate')
+    require(destructor == int(methods_rows[0]['candidate_target'], 16) - 4,
+            'Derived base destructor does not match the candidate dispatch')
+    require(text['va'] <= constructor < text['va'] + text['size'],
+            'Derived protected constructor is outside the storage text')
+    words = struct.unpack('<8I', read(constructor, 32))
+    require(words[:2] == (0xa9bf7bfd, 0x910003fd) and
+            words[2] & 0xfc000000 == 0x94000000 and
+            words[3] & 0x9f00001f == 0x90000008 and
+            words[4] & 0xffc003ff == 0x91000108 and
+            words[5:] == (0xf9000008, 0xa8c17bfd, 0xd65f03c0),
+            'Derived protected constructor is not qualified')
+    immediate = ((words[3] >> 5 & 0x7ffff) << 2) | (words[3] >> 29 & 3)
+    if immediate & 0x100000:
+        immediate -= 0x200000
+    stored = ((constructor + 12) & ~4095) + immediate * 4096 + (words[4] >> 10 & 4095)
+    require(stored == table + 16,
+            'Derived protected constructor does not store the vtable')
 else:
     headers = out / 'include/IOKit/storage'
     headers.mkdir(parents=True, exist_ok=True)
@@ -358,7 +408,12 @@ require(struct.unpack_from('<Q', actual, layout['superClassLink'])[0] == service
         struct.unpack_from('<I', service, layout['classSize'])[0] == 0x88,
         'Live block-storage class/parent ABI mismatch')
 r = {k: int(v, 16) for k, v in snapshot['system_registers'].items()}
-sctlr = r.get('SCTLR_EL1', r.get('SCTLR'))
+sctlr = r.get('SCTLR_EL1')
+if sctlr is None:
+    # QEMU 8.2 names the current-EL register "SCTLR"; accept it only for an
+    # explicitly expected kernel stop, never as an anonymous alias.
+    require(args.expect_pc, 'QEMU SCTLR alias requires --expect-pc')
+    sctlr = r.get('SCTLR')
 require(sctlr is not None and sctlr & 1 and r['TTBR0_EL1'] and r['TTBR1_EL1'],
         'Live translation is not enabled with both roots')
 require(r['TCR_EL1'] >> 14 & 3 == 0 and r['TCR_EL1'] >> 30 & 3 == 2,
