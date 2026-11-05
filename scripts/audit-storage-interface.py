@@ -88,6 +88,12 @@ require(hashlib.sha256(kernel).hexdigest() == plan['candidate_sha256'] and
 
 if args.derive:
     derive = json.loads(args.derive.resolve().read_text())
+    for key in ('candidate_sha256', 'source_revision', 'source_sha256',
+                'method_slots', 'kernel_bindings', 'vtable', 'metaclass',
+                'service_metaclass', 'methods', 'original_protected_constructor',
+                'original_base_destructor', 'compiled_public_class_size',
+                'platform_header_sha256'):
+        require(key in derive, f'derive.json is missing {key}')
     require(derive['candidate_sha256'] == plan['candidate_sha256'],
             'Derived candidate does not match the plan')
     require(derive['source_revision'] == revision and
@@ -126,10 +132,17 @@ if args.derive:
     require(len(methods_rows) == 190, 'Derived method row count changed')
     for index, row in enumerate(methods_rows):
         require(row['slot'] == index, 'Derived method slots are not contiguous')
+        require('candidate_target' in row and 'reference_name' in row,
+                f'Derived method row {index} is incomplete')
         at = np.backed_offset(native['segments'], table + 16 + index * 8, 8, len(kernel))
         actual = struct.unpack_from('<Q', kernel, at)[0]
         require(actual == int(row['candidate_target'], 16),
                 f'Derived method slot {index} does not match the candidate')
+        require(row.get('kernel_names') ==
+                exports.get(int(row['candidate_target'], 16), []),
+                f'Derived kernel names at slot {index} do not match the candidate')
+    require(matched == sum(name in by_name for name in methods),
+            'Derived kernel binding count does not match the candidate')
     function = int(methods_rows[7]['candidate_target'], 16)
     a, add, ret = struct.unpack('<3I', read(function, 12))
     require(a & 0x9f00001f == 0x90000000 and add & 0xffc003ff == 0x91000000 and
@@ -158,6 +171,48 @@ if args.derive:
     stored = ((constructor + 12) & ~4095) + immediate * 4096 + (words[4] >> 10 & 4095)
     require(stored == table + 16,
             'Derived protected constructor does not store the vtable')
+    reference_object = out / 'IOBlockStorageDevice-reference.o'
+    require(reference_object.exists(),
+            'Cached derive requires the reference object')
+    reference_bytes = reference_object.read_bytes()
+    require(hashlib.sha256(reference_bytes).hexdigest() == reference_sha256,
+            'Reference object hash changed')
+    reference_image = np.macho(reference_bytes)
+    sycmd = next(at for command, at, size in reference_image['commands']
+                 if command == 2)
+    symoff, count, stroff, _ = struct.unpack_from('<4I', reference_bytes,
+                                                 sycmd + 8)
+    reference_symbols = []
+    for i in range(count):
+        ix, kind, _, _, value = struct.unpack_from('<IBBHQ', reference_bytes,
+                                                   symoff + i * 16)
+        reference_symbols.append((reference_bytes[
+            stroff + ix:reference_bytes.index(b'\0', stroff + ix)].decode(),
+            value, kind))
+    reference_vtable = next(value for name, value, kind in reference_symbols
+                            if name == '__ZTV20IOBlockStorageDevice')
+    reference_end = min(value for name, value, kind in reference_symbols
+                        if not kind & 0xe0 and kind & 0xe == 0xe and
+                        value > reference_vtable)
+    reference_relocations = {}
+    for segment in reference_image['segments']:
+        for section in segment['sections']:
+            if section['va'] <= reference_vtable < section['va'] + section['size']:
+                ro, rc = struct.unpack_from('<II', reference_bytes,
+                                            section['command_offset'] + 56)
+                for i in range(rc):
+                    address, word = struct.unpack_from('<II', reference_bytes,
+                                                       ro + i * 8)
+                    if word >> 27 & 1 and word >> 28 == 0 and word >> 25 & 3 == 3:
+                        reference_relocations[section['va'] + address] = \
+                            reference_symbols[word & 0xffffff][0]
+    reference_names = []
+    for at in range(reference_vtable + 16, reference_end, 8):
+        if at not in reference_relocations:
+            break
+        reference_names.append(reference_relocations[at])
+    require(reference_names == [row['reference_name'] for row in methods_rows],
+            'Derived method names do not match the reference object')
 else:
     headers = out / 'include/IOKit/storage'
     headers.mkdir(parents=True, exist_ok=True)
@@ -365,15 +420,21 @@ else:
         raise SystemExit(0)
 
 snapshot = json.loads(snapshot_path.read_text())
-require(snapshot['kernel_sha256'] == plan['candidate_sha256'] and
-        not snapshot['bounded_timeout_interrupted'],
-        'Wrong or incomplete live storage metadata observation')
+require(snapshot.get('kernel_sha256') == plan['candidate_sha256'],
+        'Snapshot kernel hash does not match the candidate')
+require(snapshot.get('bounded_timeout_interrupted') is False,
+        'Snapshot was interrupted by the bounded timeout')
 if args.expect_pc:
     require(snapshot.get('pc') == hex(int(args.expect_pc, 0)),
             'Snapshot did not stop at the expected PC')
 for address in (meta, service_meta):
     require(f'{address:x}:50' in snapshot.get('memory', {}),
             f'Live storage metadata missing at {address:#x}')
+registers = snapshot.get('system_registers')
+require(isinstance(registers, dict) and registers,
+        'Snapshot has no system registers')
+for name in ('TCR_EL1', 'TTBR0_EL1', 'TTBR1_EL1'):
+    require(name in registers, f'Live register missing: {name}')
 actual = bytes.fromhex(snapshot['memory'][f'{meta:x}:50'])
 service = bytes.fromhex(snapshot['memory'][f'{service_meta:x}:50'])
 # The member offsets are a compile-time property of the same XNU source.  The
@@ -407,12 +468,16 @@ require(struct.unpack_from('<Q', actual, layout['superClassLink'])[0] == service
         struct.unpack_from('<I', actual, layout['classSize'])[0] == 0x90 and
         struct.unpack_from('<I', service, layout['classSize'])[0] == 0x88,
         'Live block-storage class/parent ABI mismatch')
-r = {k: int(v, 16) for k, v in snapshot['system_registers'].items()}
+r = {k: int(v, 16) for k, v in registers.items()}
 sctlr = r.get('SCTLR_EL1')
 if sctlr is None:
     # QEMU 8.2 names the current-EL register "SCTLR"; accept it only for an
-    # explicitly expected kernel stop, never as an anonymous alias.
+    # explicitly expected kernel stop whose current PSTATE is EL1.
     require(args.expect_pc, 'QEMU SCTLR alias requires --expect-pc')
+    require('pstate' in snapshot, 'QEMU SCTLR alias requires the current PSTATE')
+    pstate = int(snapshot['pstate'], 16)
+    require((pstate & 0xf) in (4, 5),
+            'QEMU SCTLR alias requires an EL1 stop')
     sctlr = r.get('SCTLR')
 require(sctlr is not None and sctlr & 1 and r['TTBR0_EL1'] and r['TTBR1_EL1'],
         'Live translation is not enabled with both roots')
