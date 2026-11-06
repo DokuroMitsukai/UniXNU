@@ -8,8 +8,9 @@
  *
  * panic(fmt, ...) is variadic and the Darwin arm64 ABI passes every variadic
  * argument in an 8-byte stack slot, starting at the stack pointer on entry.
- * A small printf walks the format string over those slots (%s %x %p, with
- * 0-flag, width, precision and l/ll/z). Kernel strings are checked with an
+ * A small printf walks the format string over those slots (%s %c %x %p, with
+ * 0-flag, width, precision and l/ll/z; %c emits the low byte of one argument).
+ * Kernel strings are checked with an
  * active hardware translation query before reading each byte;
  * unmapped/device/user pointers print as pointers. VINFO names that mapping prefix.
  */
@@ -52,10 +53,12 @@ static void put (struct ctx *g, u8 c)
   const u32 cell = 6 * SCALE, line = 14 * SCALE;
   u32 row, col, dy, dx;
 
+#if PANIC_TEXT
   if (g->log && g->logn < PANIC_TEXT_BYTES - 1 && c >= 9 && c <= 126) {
     g->log[g->logn++] = (c < 32) ? ' ' : c;
     g->log[g->logn] = 0;
   }
+#endif
 
   if (c == '\n') {
     g->x = 0;
@@ -173,7 +176,9 @@ static void format (struct ctx *g, const char *fmt, const u64 *args)
       break;
     }
     u64 v = args[used++];
-    if (c == 's') {
+    if (c == 'c') {
+      put (g, (u8)v);
+    } else if (c == 's') {
       const char *s = (const char *)v;
       u32 k;
       for (k = 0; k < precision; k++) {
@@ -238,8 +243,10 @@ __attribute__((noreturn, used, section(".text.b_main"))) void panic_screen_main 
   }
   g.x = 0;
   g.y = g.h / 8;
+#if PANIC_TEXT
   g.log = 0;
   g.logn = 0;
+#endif
   for (row = g.y; row < g.h; row++) {
     for (col = 0; col < g.w; col++) {
       *(volatile u32 *)(g.base + (u64)row * g.rb + (u64)col * 4) = 0;
@@ -248,9 +255,11 @@ __attribute__((noreturn, used, section(".text.b_main"))) void panic_screen_main 
   g.y += 8;
   /* The board's live banner keeps showing this text after the next swap paints over the screen (BootProgress.c,
    * boot_progress_panic_text). The first panic's text is kept: a buffer that already holds one is left alone. */
-  if (PANIC_TEXT && *(volatile u8 *)PANIC_TEXT == 0) {
+#if PANIC_TEXT
+  if (*(volatile u8 *)PANIC_TEXT == 0) {
     g.log = (u8 *)PANIC_TEXT;
   }
+#endif
   format (&g, fmt, args);
   /* The return addresses up the frame pointer chain: the exception entry links the panic's frames to the code that faulted, so this
    * names the callers the message leaves out. Stops at a pointer outside the kernel's range, a misaligned one or one that does not
@@ -268,7 +277,9 @@ __attribute__((noreturn, used, section(".text.b_main"))) void panic_screen_main 
       fp = (const u64 *)next;
     }
   }
+#if PANIC_TEXT
   g.log = 0;
+#endif
   __asm__ volatile ("dsb sy");
   /* Resolved from this candidate's symbols by the patcher, never fixed addresses.
    * Values are sampled at panic time and need not form an atomic VM snapshot. */

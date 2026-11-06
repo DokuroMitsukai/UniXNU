@@ -68,6 +68,13 @@ plan_path = args.plan.resolve() if args.plan else candidate.with_suffix('.json')
 snapshot_path = args.snapshot.resolve()
 out = args.work_dir.resolve()
 
+# The original candidate bound 162 inherited methods plus the 14 pure-virtual
+# slots (176). Linking a storage subclass, such as the gta4l block
+# personality, exports additional inherited base methods (the D8 candidate
+# binds 181), so the original count is a floor. Every slot is still checked
+# against its reference name and the candidate below.
+BASELINE_KERNEL_BINDINGS = 176
+
 
 def require(value, message):
     if not value:
@@ -99,7 +106,8 @@ if args.derive:
     require(derive['source_revision'] == revision and
             derive['source_sha256'] == source_sha256,
             'Derived public source does not match the current feed')
-    require(derive['method_slots'] == 190 and derive['kernel_bindings'] == 176,
+    require(derive['method_slots'] == 190 and
+            derive['kernel_bindings'] >= BASELINE_KERNEL_BINDINGS,
             'Derived storage dispatch shape changed')
     reference_sha256 = derive['reference_object_sha256']
     table = int(derive['vtable'], 16)
@@ -141,8 +149,6 @@ if args.derive:
         require(row.get('kernel_names') ==
                 exports.get(int(row['candidate_target'], 16), []),
                 f'Derived kernel names at slot {index} do not match the candidate')
-    require(matched == sum(name in by_name for name in methods),
-            'Derived kernel binding count does not match the candidate')
     function = int(methods_rows[7]['candidate_target'], 16)
     a, add, ret = struct.unpack('<3I', read(function, 12))
     require(a & 0x9f00001f == 0x90000000 and add & 0xffc003ff == 0x91000000 and
@@ -213,6 +219,8 @@ if args.derive:
         reference_names.append(reference_relocations[at])
     require(reference_names == [row['reference_name'] for row in methods_rows],
             'Derived method names do not match the reference object')
+    require(matched == sum(name in by_name for name in methods),
+            'Derived kernel binding count does not match the candidate')
 else:
     headers = out / 'include/IOKit/storage'
     headers.mkdir(parents=True, exist_ok=True)
@@ -326,7 +334,8 @@ else:
     require(len(found) == 1, 'Cannot uniquely identify the original block-storage class dispatch')
     table, pointers = found[0]
     matched = sum(name in by_name for name in methods)
-    require(matched == 176, 'Unexpected original/native kernel binding count')
+    require(matched >= BASELINE_KERNEL_BINDINGS,
+            'Unexpected original/native kernel binding count')
     for i, name in enumerate(methods):
         if name not in by_name:
             require(text['va'] <= pointers[i] < text['va'] + text['size'],
@@ -406,7 +415,9 @@ else:
                       vtable=hex(table), metaclass=hex(meta),
                       service_metaclass=hex(service_meta),
                       method_slots=len(methods), kernel_bindings=matched,
-                      pure_virtual_slots=14, inherited_kernel_methods=162,
+                      pure_virtual_slots=methods.count('___cxa_pure_virtual'),
+                      inherited_kernel_methods=matched -
+                      methods.count('___cxa_pure_virtual'),
                       abstract_complete_destructors_trap=True,
                       original_protected_constructor=hex(constructor),
                       original_base_destructor=hex(destructor),
@@ -430,13 +441,30 @@ if args.expect_pc:
 for address in (meta, service_meta):
     require(f'{address:x}:50' in snapshot.get('memory', {}),
             f'Live storage metadata missing at {address:#x}')
+
+
+def live_metadata(address):
+    key = f'{address:x}:50'
+    value = snapshot['memory'][key]
+    require(isinstance(value, str) and len(value) == 0x50 * 2,
+            f'Live storage metadata at {address:#x} is truncated')
+    try:
+        raw = bytes.fromhex(value)
+    except ValueError:
+        raise SystemExit(
+            f'Live storage metadata at {address:#x} is not valid hex')
+    require(len(raw) == 0x50,
+            f'Live storage metadata at {address:#x} is truncated')
+    return raw
+
+
 registers = snapshot.get('system_registers')
 require(isinstance(registers, dict) and registers,
         'Snapshot has no system registers')
 for name in ('TCR_EL1', 'TTBR0_EL1', 'TTBR1_EL1'):
     require(name in registers, f'Live register missing: {name}')
-actual = bytes.fromhex(snapshot['memory'][f'{meta:x}:50'])
-service = bytes.fromhex(snapshot['memory'][f'{service_meta:x}:50'])
+actual = live_metadata(meta)
+service = live_metadata(service_meta)
 # The member offsets are a compile-time property of the same XNU source.  The
 # Linux/QEMU path derives them from OSMetaClass.cpo directly; the macOS path
 # keeps consuming the existing AES audit.
@@ -493,8 +521,10 @@ result = dict(public_source_revision=revision, source_sha256=source_sha256,
               original_sha256=plan['original_sha256'],
               snapshot_sha256=hashlib.sha256(snapshot_path.read_bytes()).hexdigest(),
               original_executable_code_unchanged=True,
-              method_slots=190, kernel_bindings=matched, pure_virtual_slots=14,
-              inherited_kernel_methods=162,
+              method_slots=190, kernel_bindings=matched,
+              pure_virtual_slots=methods.count('___cxa_pure_virtual'),
+              inherited_kernel_methods=matched -
+              methods.count('___cxa_pure_virtual'),
               vtable=hex(table), original_metaclass=hex(meta),
               source_ioservice_metaclass=hex(service_meta),
               original_protected_constructor=hex(constructor),
@@ -507,7 +537,8 @@ result = dict(public_source_revision=revision, source_sha256=source_sha256,
               disk_read_tested=False, transport_implemented=False, hardware_tested=False)
 args.output.parent.mkdir(parents=True, exist_ok=True)
 args.output.write_text(json.dumps(result, indent=2) + '\n')
-print('PASS: 190 ordinary iOS storage slots; 176 kernel bindings '
-      '(162 inherited + 14 pure virtual)')
+print(f'PASS: 190 ordinary iOS storage slots; {matched} kernel bindings '
+      f'({matched - methods.count("___cxa_pure_virtual")} inherited + '
+      f'{methods.count("___cxa_pure_virtual")} pure virtual)')
 print('Live original block/service sizes 0x90/0x88 and native 4K. '
       'Annotation object is never linked/executed; block I/O remains unqualified.')
