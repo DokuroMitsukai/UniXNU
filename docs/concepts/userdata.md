@@ -7,15 +7,15 @@ The userdata partition carries the Darwin root file system. UniXNU keeps the ori
 ```
 struct shngroot_header {
   char     magic[8];        /* "SHNGROOT" */
-  uint32_t version;         /* 1 */
-  uint32_t count;           /* window count */
+  uint32_t version;         /* 1 = windows, 2 = windows and objects */
+  uint32_t count;           /* window and object count */
   uint64_t image_bytes;     /* total image size */
   struct {
     char     name[32];
     uint64_t offset;
     uint64_t size;
-    uint32_t block_size;    /* 512 */
-    uint32_t flags;         /* bit 0: read-only */
+    uint32_t block_size;    /* 512 window, 4096 object */
+    uint32_t flags;         /* 1 = read-only window, 3 = data object */
     uint8_t  sha256[32];
     uint8_t  reserved[40];
   } window[count];
@@ -25,6 +25,10 @@ struct shngroot_header {
 ```
 
 The header occupies 4096 bytes and is zero padded to 1 MiB. The first window starts at 0x100000. Every window is aligned to 1 MiB.
+
+## Data objects
+
+Version 2 adds data objects: blobs the kernel reads itself and never publishes as block devices (policy hash tables, firmware). Objects use 4096-byte blocks and flags 3, are 4096-byte aligned and do not overlap windows or each other; the same 4 KiB padding rule applies to the overlap check. Version 1 parsers refuse a version-2 manifest, so a device that needs objects also needs a parser that accepts version 2. `[userdata] objects = [{ name, path }]` adds them to the image; the object source is copied byte for byte and hashed into the entry. Window and object names share one namespace and must be unique.
 
 ## Windows
 
@@ -82,7 +86,9 @@ The persistent store serves the disk from a window at the end of the userdata pa
 | `image_bytes` | Total image size |
 | `image_sha256` | Image hash |
 | `manifest_sha256` | Manifest hash |
+| `manifest_version` | 1 for windows only, 2 when data objects are present |
 | `windows` | Name, offset, size and hash of each window |
+| `objects` | Name, offset, size and hash of each data object |
 | `userdata_bytes` | Partition capacity |
 | `flash_command` | `fastboot flash userdata <image>` |
 | `source` | Local or remote IPSW |
