@@ -329,6 +329,21 @@ if [ "$OWNER_ROOT_TRUST" = 1 ] && { [ "$OWNER_ROOT_AUDIT" != 1 ] || [ -z "$VERIF
   echo 'Owner root acceptance requires actual mounted-media binding and a verified block provider' >&2
   exit 1
 fi
+# The owner flags change the patched bsd_init/kern_exec/IOKitBSDInit/vm_unix
+# objects in place. Make does not track a changed -D set, so drop those
+# objects and the linked kernel when the flag identity moves.
+VERIFIED_ROOT_FLAGS="probe=$OWNER_ROOT_PROBE audit=$OWNER_ROOT_AUDIT trust=$OWNER_ROOT_TRUST cache=${XNU_OWNER_CACHE_MOUNT:-0} data=${XNU_OWNER_DATA_MOUNT:-0} manifest=${XNU_OWNER_BOOT_MANIFEST:-0} carrier=${XNU_OWNER_CACHE_CARRIER:-0} air=${XNU_NATIVE_AIR_INIT:-0} provider=$VERIFIED_BLOCK_PROVIDER"
+VERIFIED_ROOT_OBJ="$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837"
+VERIFIED_ROOT_STAMP="$VERIFIED_ROOT_OBJ/.verified-root-flags"
+if [ ! -f "$VERIFIED_ROOT_STAMP" ] || [ "$(cat "$VERIFIED_ROOT_STAMP")" != "$VERIFIED_ROOT_FLAGS" ]; then
+  rm -f "$VERIFIED_ROOT_OBJ/bsd/DEVELOPMENT/bsd_init.o" \
+        "$VERIFIED_ROOT_OBJ/bsd/DEVELOPMENT/kern_exec.o" \
+        "$VERIFIED_ROOT_OBJ/bsd/DEVELOPMENT/vm_unix.o" \
+        "$VERIFIED_ROOT_OBJ/iokit/DEVELOPMENT/IOKitBSDInit.o" \
+        "$VERIFIED_ROOT_OBJ/mach.development.bcm2837.unstripped.noctf" \
+        "$VERIFIED_ROOT_OBJ/iokit/DEVELOPMENT/KernelConfigTables.cpo"
+  printf '%s\n' "$VERIFIED_ROOT_FLAGS" > "$VERIFIED_ROOT_STAMP"
+fi
 ADRENO_FIRMWARE_PROBE=${XNU_ADRENO_FIRMWARE_PROBE:-0}
 if [ "$ADRENO_FIRMWARE_PROBE" != 0 ] && [ "$ADRENO_FIRMWARE_PROBE" != 1 ]; then
   echo 'XNU_ADRENO_FIRMWARE_PROBE must be 0 or 1' >&2
