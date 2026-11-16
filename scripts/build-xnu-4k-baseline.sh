@@ -290,13 +290,43 @@ if [ "$OWNER_ROOT_AUDIT" = 1 ] && [ "$OWNER_ROOT_PROBE" != 1 ]; then
   echo 'The root-binding audit requires real owner-verified block crypto' >&2
   exit 1
 fi
+VERIFIED_BLOCK_PROVIDER=${XNU_VERIFIED_BLOCK_PROVIDER:-}
+if [ -z "$VERIFIED_BLOCK_PROVIDER" ]; then
+  if [ "${XNU_NATIVE_VIRTIO_BLOCK:-0}" = 1 ] && [ "${XNU_NATIVE_GTA4L_EMMC_BLOCK:-0}" = 1 ]; then
+    echo 'XNU_VERIFIED_BLOCK_PROVIDER is required when both block transports are enabled' >&2
+    exit 1
+  elif [ "${XNU_NATIVE_VIRTIO_BLOCK:-0}" = 1 ]; then
+    VERIFIED_BLOCK_PROVIDER=virtio
+  elif [ "${XNU_NATIVE_GTA4L_EMMC_BLOCK:-0}" = 1 ]; then
+    VERIFIED_BLOCK_PROVIDER=gta4l-emmc
+  fi
+fi
+case "$VERIFIED_BLOCK_PROVIDER" in
+  '') ;;
+  virtio)
+    if [ "${XNU_NATIVE_VIRTIO_BLOCK:-0}" != 1 ]; then
+      echo 'The virtio verified-block provider requires XNU_NATIVE_VIRTIO_BLOCK=1' >&2
+      exit 1
+    fi
+    ;;
+  gta4l-emmc)
+    if [ "${XNU_NATIVE_GTA4L_EMMC_BLOCK:-0}" != 1 ]; then
+      echo 'The gta4l-emmc verified-block provider requires XNU_NATIVE_GTA4L_EMMC_BLOCK=1' >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo 'XNU_VERIFIED_BLOCK_PROVIDER must be empty, virtio or gta4l-emmc' >&2
+    exit 1
+    ;;
+esac
 OWNER_ROOT_TRUST=${XNU_OWNER_ROOT_TRUST:-0}
 if [ "$OWNER_ROOT_TRUST" != 0 ] && [ "$OWNER_ROOT_TRUST" != 1 ]; then
   echo 'XNU_OWNER_ROOT_TRUST must be 0 or 1' >&2
   exit 1
 fi
-if [ "$OWNER_ROOT_TRUST" = 1 ] && { [ "$OWNER_ROOT_AUDIT" != 1 ] || [ "${XNU_NATIVE_VIRTIO_BLOCK:-0}" != 1 ]; }; then
-  echo 'Owner root acceptance requires actual mounted-media binding and verified block storage' >&2
+if [ "$OWNER_ROOT_TRUST" = 1 ] && { [ "$OWNER_ROOT_AUDIT" != 1 ] || [ -z "$VERIFIED_BLOCK_PROVIDER" ]; }; then
+  echo 'Owner root acceptance requires actual mounted-media binding and a verified block provider' >&2
   exit 1
 fi
 ADRENO_FIRMWARE_PROBE=${XNU_ADRENO_FIRMWARE_PROBE:-0}
@@ -738,7 +768,7 @@ PY_BINDINGS
     KERNEL_EXTRA_ARCHIVES="$KERNEL_EXTRA_ARCHIVES -Wl,-force_load,$PTHREAD_ARCHIVE"
     KERNEL_ARCHIVE_DEPENDENCIES="$KERNEL_ARCHIVE_DEPENDENCIES $PTHREAD_ARCHIVE"
   fi
-  if [ "$OWNER_ROOT_PROBE" = 1 ]; then
+  if [ "$OWNER_ROOT_PROBE" = 1 ] && [ "$VERIFIED_BLOCK_PROVIDER" != gta4l-emmc ]; then
     VERIFIED_ROOT_ARCHIVE=${XNU_VERIFIED_ROOT_ARCHIVE:-$ROOT/build/verified-root-xnu/libVerifiedRootProbe.a}
     test -f "$VERIFIED_ROOT_ARCHIVE"
     KERNEL_EXTRA_ARCHIVES="$KERNEL_EXTRA_ARCHIVES -Wl,-force_load,$VERIFIED_ROOT_ARCHIVE"
