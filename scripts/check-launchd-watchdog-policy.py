@@ -9,10 +9,17 @@ from native_prelink import macho,backed_offset
 from unicorn import Uc,UC_ARCH_ARM64,UC_MODE_ARM,UC_HOOK_CODE
 from unicorn import arm64_const as regs
 raw=a.launchd.read_bytes();sha=hashlib.sha256(raw).hexdigest();assert sha=='8cec9a3c44a443b08e977ccc5d577850316ad428c575dc01f09b018dbd5b6a25'
-m=macho(raw);data=a.policy.read_bytes();assert plistlib.loads(data)=={'com.apple.watchdogd':True}
+m=macho(raw);data=a.policy.read_bytes();policy=plistlib.loads(data)
+approved=[{'com.apple.watchdogd':True},
+          {'com.apple.watchdogd':True,'com.apple.locationd':True,
+           'com.apple.identityservicesd':True}]
+assert policy in approved, policy
+labels=list(policy)
 def w(pc):return struct.unpack_from('<I',raw,backed_offset(m['segments'],pc,4,len(raw)))[0]
 results=[]
-for label,uid,disabled in [('com.apple.watchdogd',0,True),('com.apple.watchdogd',502,False),('com.apple.other',0,False)]:
+for label,uid,disabled in ([(label,0,True) for label in labels]+
+                           [(label,502,False) for label in labels]+
+                           [('com.apple.other',0,False)]):
  u=Uc(UC_ARCH_ARM64,UC_MODE_ARM)
  for s in m['segments']:
   if s['name']=='__PAGEZERO' or not s['size']:continue
@@ -71,5 +78,5 @@ for label,uid,disabled in [('com.apple.watchdogd',0,True),('com.apple.watchdogd'
  setr('sp',0x20003f000);setr('x22',domain);setr('x27',0x200011000);setr('x20',0);setr('x25',0);setr('x28',0)
  u.emu_start(0x100004140,0x200000f00,count=1000);assert outcomes==[disabled],(uid,label,outcomes)
  results.append(dict(label=label,file_uid=uid,disabled=outcomes[0],events=events))
-a.report.parent.mkdir(parents=True,exist_ok=True);a.report.write_text(json.dumps(dict(launchd_sha256=sha,policy_sha256=hashlib.sha256(data).hexdigest(),cases=results,filesystem_and_libxpc_APIs_substituted=True,hardware_policy_accepted=False),indent=2)+'\n')
-print('PASS: original launchd loader, UID/mode validation, override lookup and default job-import gate; root policy skips watchdogd only; OS APIs substituted')
+a.report.parent.mkdir(parents=True,exist_ok=True);a.report.write_text(json.dumps(dict(launchd_sha256=sha,policy_sha256=hashlib.sha256(data).hexdigest(),policy_labels=labels,cases=results,filesystem_and_libxpc_APIs_substituted=True,hardware_policy_accepted=False),indent=2)+'\n')
+print('PASS: original launchd loader, UID/mode validation, override lookup and default job-import gate; root policy skips '+','.join(labels)+' only; OS APIs substituted')
