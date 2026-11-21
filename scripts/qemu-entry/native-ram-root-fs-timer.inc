@@ -211,9 +211,24 @@ Ldiag_check_seek_second:
   str x8, [x20]
 
   // All checks passed.
+#ifdef NATIVE_RAM_ROOT_FS_TIMER_HOLD
+  // Diagnostic hold variant: after the same fs/timer checks, block without
+  // exiting or panicking so the kernel eMMC report thread or its watchdog
+  // owns termination. Failure paths below keep their immediate panic.
+  mov x8, #7
+  str x8, [x20]
+Ldiag_hold:
+  mov x0, #0
+  mov x1, #0
+  mov x2, #1000
+  mov x16, #230
+  svc #0x80
+  b Ldiag_hold
+#else
   adrp x1, Ldiag_pass_message@PAGE
   add x1, x1, Ldiag_pass_message@PAGEOFF
   b Ldiag_panic
+#endif
 
 Ldiag_fail_baseline:
   adrp x1, Ldiag_fail_baseline_message@PAGE

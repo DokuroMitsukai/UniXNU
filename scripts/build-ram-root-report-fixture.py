@@ -27,15 +27,18 @@ parser.add_argument('--tree', type=Path, required=True, help='UniXNU output tree
 parser.add_argument('--toolchain', type=Path, required=True, help='Linux toolchain root')
 parser.add_argument('--rcodesign', type=Path, required=True, help='rcodesign binary')
 parser.add_argument('--identifier', default='org.blu-sharky.ram-root-report')
-parser.add_argument('--diagnostic', choices=('report', 'fs-timer'), default='report',
-                    help='bounded EL0 report or mockfs read/timer diagnostic')
+parser.add_argument('--diagnostic', choices=('report', 'fs-timer', 'fs-timer-hold'),
+                    default='report',
+                    help='bounded EL0 report, mockfs read/timer diagnostic, or '
+                         'the same diagnostic holding after success for a '
+                         'kernel-side observer')
 parser.add_argument('--test-size', type=int, default=12288,
                     help='size of the deterministic /probe.bin test file')
 args = parser.parse_args()
 if args.test_size < 0 or args.test_size > 32 * 1024 * 1024:
     parser.error('test file size must be between 0 and 32 MiB')
-if args.diagnostic == 'fs-timer' and args.test_size < 12288:
-    parser.error('the fs-timer diagnostic requires a test file of at least 12288 bytes')
+if args.diagnostic in ('fs-timer', 'fs-timer-hold') and args.test_size < 12288:
+    parser.error('the fs-timer diagnostics require a test file of at least 12288 bytes')
 
 out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -52,10 +55,15 @@ sdk = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'],
 source = ROOT / 'scripts/qemu-entry/native-user.S'
 user_o = out / 'user.o'
 unsigned = out / 'launchd.macho'
-diagnostic_flag = ('-DNATIVE_RAM_ROOT_FS_TIMER=1' if args.diagnostic == 'fs-timer'
-                   else '-DNATIVE_RAM_ROOT_REPORT=1')
+diagnostic_flags = []
+if args.diagnostic in ('fs-timer', 'fs-timer-hold'):
+    diagnostic_flags.append('-DNATIVE_RAM_ROOT_FS_TIMER=1')
+    if args.diagnostic == 'fs-timer-hold':
+        diagnostic_flags.append('-DNATIVE_RAM_ROOT_FS_TIMER_HOLD=1')
+else:
+    diagnostic_flags.append('-DNATIVE_RAM_ROOT_REPORT=1')
 run(['xcrun', 'clang', '-target', 'arm64-apple-ios17.0', '-isysroot', sdk,
-     diagnostic_flag, '-c', source, '-o', user_o])
+     *diagnostic_flags, '-c', source, '-o', user_o])
 run(['xcrun', 'ld', '-arch', 'arm64', '-static', '-e', '_start',
      '-platform_version', 'ios', '17.0', '17.0', user_o, '-o', out / 'launchd-static.macho'])
 run(['xcrun', 'vtool', '-set-build-version', 'ios', '17.0', '17.0',
@@ -182,7 +190,7 @@ symbols = subprocess.check_output(['xcrun', 'nm', '-U', unsigned], text=True, en
 addresses = {name: int(address, 16) for address, name in
              re.findall(r'^([0-9a-fA-F]+)\s+\S+\s+(_\S+)$', symbols, re.M)}
 (out / 'addresses.json').write_text(json.dumps(addresses, indent=2) + '\n')
-(out / 'fixture.json').write_text(json.dumps({
+fixture_record = {
     'purpose': 'bounded RAM-root/EL0 report fixture; not an authenticated-root result',
     'signer': 'rcodesign ad-hoc; CodeDirectory independently parsed and page-verified',
     'diagnostic': args.diagnostic,
@@ -199,14 +207,20 @@ addresses = {name: int(address, 16) for address, name in
     'test_offset': check_offset,
     'test_size': check_size,
     'root_image_size': len(root_data),
-    'report_message': ('RAMROOT-FST PASS: pid=1 page=4096 fs=read+seek+eof timer=poll'
-                       if args.diagnostic == 'fs-timer'
-                       else 'RAMROOT-EL0 PASS: pid=1 page=4096'),
+    'report_message': (
+        'RAMROOT-FST PASS: pid=1 page=4096 fs=read+seek+eof timer=poll'
+        if args.diagnostic in ('fs-timer', 'fs-timer-hold')
+        else 'RAMROOT-EL0 PASS: pid=1 page=4096'),
+}
+if args.diagnostic == 'fs-timer-hold':
+    fixture_record['hold_after_success'] = True
+fixture_record.update({
     'test_file_sha256': hashlib.sha256(test).hexdigest(),
     'test_file_size': len(test),
     'apple_trust_chain_verified': False,
     'test_instrument_only': True,
-}, indent=2) + '\n')
+})
+(out / 'fixture.json').write_text(json.dumps(fixture_record, indent=2) + '\n')
 print(json.dumps({
     'signed_sha256': hashlib.sha256(data).hexdigest(),
     'cdhash': cdhash.hex(),

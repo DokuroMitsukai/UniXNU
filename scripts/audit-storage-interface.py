@@ -219,7 +219,11 @@ if args.derive:
         reference_names.append(reference_relocations[at])
     require(reference_names == [row['reference_name'] for row in methods_rows],
             'Derived method names do not match the reference object')
-    require(matched == sum(name in by_name for name in methods),
+    # Count the slots whose derived target really is the kernel export.
+    # A linked subclass may shadow a base export without changing the
+    # original dispatch, so name presence alone is not the binding count.
+    require(matched == sum(1 for i, name in enumerate(methods)
+                           if name in by_name and pointers[i] == by_name[name]),
             'Derived kernel binding count does not match the candidate')
 else:
     headers = out / 'include/IOKit/storage'
@@ -329,11 +333,22 @@ else:
         if blob[at:at + 16] != bytes(16):
             continue
         pointers = struct.unpack_from('<' + 'Q' * len(methods), blob, at + 16)
-        if all(pointers[i] == by_name[name] for i, name in enumerate(methods) if name in by_name):
-            found.append((const['va'] + at, pointers))
+        hits = sum(1 for i, name in enumerate(methods)
+                   if name in by_name and pointers[i] == by_name[name])
+        owned = all(text['va'] <= pointers[i] < text['va'] + text['size']
+                    for i, name in enumerate(methods) if name not in by_name)
+        # A linked subclass can shadow an exported base name (its own
+        # override takes the export entry), so an exact all-name match is
+        # not required. Rank by the exported-name hits among tables whose
+        # unexported slots stay in the original storage text; the subclass
+        # vtable fails that second test.
+        if hits and owned:
+            found.append((const['va'] + at, pointers, hits))
+    require(found, 'Cannot identify the original block-storage class dispatch')
+    best = max(hits for _, _, hits in found)
+    found = [entry for entry in found if entry[2] == best]
     require(len(found) == 1, 'Cannot uniquely identify the original block-storage class dispatch')
-    table, pointers = found[0]
-    matched = sum(name in by_name for name in methods)
+    table, pointers, matched = found[0]
     require(matched >= BASELINE_KERNEL_BINDINGS,
             'Unexpected original/native kernel binding count')
     for i, name in enumerate(methods):
