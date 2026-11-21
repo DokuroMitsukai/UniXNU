@@ -5,7 +5,9 @@ id = "ArmCpu"
 kind = "driver"
 function = "ARM generic interrupt controller and timer"
 scope = "arm64"
-# Build the fork, which carries the GICv2 work.
+# Build the fork, which carries the GICv2 work.  The fork pin predates the
+# upstream sleep/resume series, so the catalog lists only the sources this pin
+# has; upstream's ArmCpuSleep.h is not part of it.
 repository = "https://github.com/DokuroMitsukai/ArmCpu.git"
 revision = "c9c4bd87cabc1fe6736e171cd2540313ac4b7883"
 path = "drivers/ArmCpu"
@@ -14,7 +16,7 @@ os_abi = ["ipados-17.7.11-21H461"]
 board_dependencies = []
 verified_devices = []
 dependencies = []
-source_files = ["ArmCpu.cpp", "ArmCpuSleep.h"]
+source_files = ["ArmCpu.cpp"]
 runtime_identifiers = ["ArmCpu.cpp", "org.blu-sharky.ArmCpu", "ArmCpu"]
 build_stage = "kernel"
 build = ["build-arm-driver.py", "ArmCpu"]
@@ -85,7 +87,7 @@ kind = "driver"
 function = "A740 kernel GPU driver"
 scope = "gpu"
 repository = "https://github.com/UniXNU/Adreno740.git"
-revision = "1c9029bc3216a39d9e514ba41dee12e95e8f3598"
+revision = "4e0314df8ad29d52f6fa3f9383a540adcd618b87"
 path = "drivers/Adreno740"
 hardware = ["Adreno 740", "SM8550"]
 os_abi = ["ipados-17.7.11-21H461"]
@@ -107,7 +109,7 @@ kind = "driver"
 function = "Metal frontend through metal2vulkan and Turnip"
 scope = "graphics"
 repository = "https://github.com/UniXNU/AdrenoMetal.git"
-revision = "c9ebd2fb17253996f0a8d835c9ab7c2f740778e1"
+revision = "454ff2ce83766ce7b3e0f355e83f1d72907708b3"
 path = "drivers/AdrenoMetal"
 hardware = ["Turnip Darwin backend", "kernel GPU user-client ABI"]
 os_abi = ["ipados-17.7.11-21H461", "macos-27.3-26C5035r"]
@@ -212,8 +214,12 @@ repository_id = 1426849559
 kind = "driver"
 function = "UEFI GOP framebuffer and MobileFramebuffer integration"
 scope = "display"
+# Keep the pin the gta4l legacy display path was qualified on.  Upstream main
+# grew the driver by ~770 lines for macOS and its current source crashes the
+# available clang-24 in ParseAST on this board file; re-qualifying that update
+# is separate work.
 repository = "https://github.com/UniXNU/GopFramebuffer.git"
-revision = "e47c1b8de169cd2bd0b885c7d85e433010e3cdf2"
+revision = "cf3b42979a9c44219e7bb149543e6fc3388b58ed"
 path = "drivers/GopFramebuffer"
 hardware = ["UEFI GOP framebuffer"]
 os_abi = ["ipados-17.7.11-21H461", "ipados-27.0.1-24A446"]
@@ -279,7 +285,7 @@ kind = "driver"
 function = "RAM-backed block device and sparse seed storage"
 scope = "storage"
 repository = "https://github.com/UniXNU/RamBlock.git"
-revision = "00a6e5dd6bb1709e817e13daec7986308cfb6d0f"
+revision = "25c57e0e9b68bf452dd1986914525edc9d2320bc"
 path = "drivers/RamBlock"
 hardware = ["RAM block backing"]
 os_abi = ["ipados-17.7.11-21H461"]
@@ -345,7 +351,7 @@ kind = "kit"
 function = "XNU kernelcache prelink and ABI inspection"
 scope = "tool"
 repository = "https://github.com/UniXNU/XnuPrelink.git"
-revision = "c645d76bb0ab8c506a76840ddf93a2276d419a0e"
+revision = "f876e3ee62e18fc06653dd75ed7dafcfb3950ac0"
 path = "kits/XnuPrelink"
 hardware = []
 os_abi = []
@@ -403,7 +409,7 @@ kind = "kit"
 function = "ARM SMMU translation with 4 KiB pages"
 scope = "controller"
 repository = "https://github.com/UniXNU/ArmSmmu4K.git"
-revision = "83969cd874503e65997ff7639f7dcf3d0a92cd17"
+revision = "8bb168ad058c28d5c04f179ba407875eacba7ef3"
 path = "kits/ArmSmmu4K"
 hardware = ["ARM SMMU", "MMU-500"]
 os_abi = []
@@ -441,7 +447,7 @@ kind = "kit"
 function = "Authenticated block reads"
 scope = "storage"
 repository = "https://github.com/UniXNU/VerifiedRoot.git"
-revision = "974f043d0c71ba2e60331483a41c6c6d35274ee3"
+revision = "def026642c6c6e71be0dea267d989df1d29ddc64"
 path = "kits/VerifiedRoot"
 hardware = []
 os_abi = []
