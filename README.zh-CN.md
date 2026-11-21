@@ -10,8 +10,10 @@
   <a href="https://unixnu.com"><img alt="文档" src="https://img.shields.io/badge/docs-unixnu.com-2A5BD7?logo=readthedocs&logoColor=white"></a>
   <a href="https://t.me/unixnu"><img alt="Telegram" src="https://img.shields.io/badge/Telegram-@unixnu-26A5E4?logo=telegram&logoColor=white"></a>
   <a href="https://qun.qq.com/universal-share/share?ac=1&authKey=Pubz23DOCY76nxjlGuSms2zesk4jRvas4zrXJRYk7omf7CprXbGQigLEI%2BCoYR8D&busi_data=eyJncm91cENvZGUiOiIxMTI2MTE2NzU5IiwidG9rZW4iOiJwSHJsUDN1UnN2Vi8yM210TjJRbzBIcERmcUpyOS9lb0hHVVpadWdvVFdScVpSYUFLT1YzTk5TWC9mN2xWYmtIIiwidWluIjoiMzE1MTEwOTc0MSJ9&data=_cJgr-jX9yJ2-GXwVjRN5FOhDyk5B-HAfIk5LSunbW_XkkmKqNXbpH33wzP93J0p9DI1fbjgBUrUfTVhwDcxjg&svctype=4&tempid=h5_group_info"><img alt="QQ 群" src="https://img.shields.io/badge/QQ%20Group-join-12B7F5?logo=qq&logoColor=white"></a>
-  <a href="https://x.com/unixnu"><img alt="X" src="https://img.shields.io/badge/X-@unixnu-000000?logo=x&logoColor=white"></a>
+  <a href="https://x.com/UniXNU_new"><img alt="X" src="https://img.shields.io/badge/X-@UniXNU__new-000000?logo=x&logoColor=white"></a>
 </p>
+
+**本项目始终免费、自由、开源，且不分发 Apple 和任何厂商的私有二进制以合规。请不要通过盈利性质的网盘分发或销售预编译镜像。若您执意如此，请[参见](https://baidu.ma/?q=5a2k5YS/5oCO5LmI5Yqe55CG5oi35Y+j5pys)。**
 
 <p align="center">
   <a href="README.md">English</a> | 简体中文
@@ -25,7 +27,7 @@
 
 UniXNU 为不同 SoC 和设备的移植提供共享构建工具、ARM64 支持、OS 配置和可复用组件。SoC 仓库提供公共平台支持，设备仓库提供板级配置和硬件集成。
 
-**🎉 News:** Adreno740 和 AdrenoMetal 在 sheng 上提供 GPU 加速。详见 [Adreno 740 驱动文档](https://unixnu.com/zh/drivers/adreno740)。
+**🎉 News:** Adreno740 和 AdrenoMetal 实现 A740/SM8550 GPU 加速。详见 [Adreno 740 驱动文档](https://unixnu.com/zh/drivers/adreno740)。
 
 文档：[unixnu.com](https://unixnu.com/zh/)。从[移植设备](https://unixnu.com/zh/porting/)或[构建与启动](https://unixnu.com/zh/building)开始。
 
@@ -43,6 +45,8 @@ UniXNU 为不同 SoC 和设备的移植提供共享构建工具、ARM64 支持�
 ## 参与贡献
 
 见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+macOS 27 配置的内核补丁（union 根卷、4K 内核上的代码签名页、24 MHz 时基、实时与 mmap 修正、禁止执行）和 Data 种子里的账户设置参考了由 UniXNU 引导的 [macOS-DroidVM](https://github.com/Droid-VM/macOS-DroidVM)。
 
 ## 许可证
 

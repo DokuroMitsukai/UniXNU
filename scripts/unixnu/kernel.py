@@ -1,10 +1,16 @@
 """XNU kernel: build from the patched Apple source, then prelink against the original kernelcache."""
 import os
+import hashlib
+import json
 import platform
 import shlex
+import shutil
+import struct
+import tempfile
 from pathlib import Path
 
 from . import components, ipsw, patches
+from .config import load_toml
 from .util import Error, expand, log, run, sha256_file, tool
 
 
@@ -23,7 +29,7 @@ def xnu_env(ctx):
 def version_env(modules, ctx=None):
     """Source versions of the Apple references, from feeds.toml, for the kernel scripts."""
     env = {}
-    for name, prefix in (('xnu', 'XNU'), ('libplatform', 'LIBPLATFORM'), ('libdispatch', 'LIBDISPATCH'), ('AvailabilityVersions', 'AVAILABILITYVERSIONS')):
+    for name, prefix in (('xnu', 'XNU'), ('libplatform', 'LIBPLATFORM'), ('libdispatch', 'LIBDISPATCH'), ('AvailabilityVersions', 'AVAILABILITYVERSIONS'), ('libpthread', 'LIBPTHREAD'), ('IOStorageFamily', 'IOSTORAGEFAMILY')):
         module = modules.get(('refer', name))
         entry = module.source if module and module.source else {}
         if entry.get('ref'):
@@ -37,6 +43,7 @@ def version_env(modules, ctx=None):
             env[variable] = xnu[key]
     if ctx and ctx.schema_version == 2:
         profile = ctx.board.get('os', {})
+        env['UNIXNU_OS_PROFILE'] = str(ctx.profile_roots['os'] / 'profile.toml')
         for key, variable in (('xnu_revision', 'UNIXNU_XNU_COMMIT'), ('xnu_version', 'UNIXNU_XNU_VERSION'),
                               ('darwin', 'UNIXNU_XNU_DARWIN'), ('driverkit_tag', 'UNIXNU_DRIVERKIT_TAG'),
                               ('trustcache_tag', 'UNIXNU_TRUSTCACHE_TAG')):
@@ -44,6 +51,28 @@ def version_env(modules, ctx=None):
                 env[variable] = profile[key]
         if profile.get('xnu_version'):
             env['UNIXNU_XNU_TAG'] = 'xnu-' + profile['xnu_version']
+        if profile.get('ios_version'):
+            env['UNIXNU_IOS_VERSION'] = profile['ios_version']
+        # The userspace the kernel serves: ios (default) or macosx (XNU_TARGET_OS_OSX instead of XNU_TARGET_OS_IOS).
+        env['UNIXNU_XNU_TARGET'] = profile.get('target', 'ios')
+        # The root images of the OS: volume UUIDs and image digests the kernel and the storage builder check.
+        root = ctx.board.get('root', {})
+        for key, variable in (('os_volume_uuid', 'XNU_OWNER_ROOT_VOLUME_UUID'),
+                              ('systemos_volume_uuid', 'XNU_OWNER_CACHE_VOLUME_UUID'),
+                              ('app_volume_uuid', 'XNU_OWNER_APP_VOLUME_UUID'),
+                              ('os_image_sha256', 'UNIXNU_ROOT_OS_SHA256'),
+                              ('systemos_image_sha256', 'UNIXNU_ROOT_SYSTEMOS_SHA256'),
+                              ('app_image_sha256', 'UNIXNU_ROOT_APP_SHA256')):
+            if root.get(key):
+                env[variable] = root[key]
+        if root.get('os_volume_uuid'):
+            env['UNIXNU_ROOT_OS_UUID'] = root['os_volume_uuid']
+        if root.get('systemos_volume_uuid'):
+            env['UNIXNU_ROOT_SYSTEMOS_UUID'] = root['systemos_volume_uuid']
+        if root.get('app_volume_uuid'):
+            env['UNIXNU_ROOT_APP_UUID'] = root['app_volume_uuid']
+        env['UNIXNU_IPSW_BUILD'] = ctx.board.get('ipsw', {}).get('build', '')
+        env['UNIXNU_XNU_ARCH'] = load_toml(ctx.profile_roots['arch'] / 'profile.toml').get('arch', {}).get('name', 'arm64')
     return env
 
 
@@ -89,6 +118,16 @@ def archive_plan(ctx):
         return [('script', entry) for entry in entries]
     specs = {spec['id']: spec for spec in ctx.component_specs}
     required = {name for name, spec in specs.items() if spec.get('build') and spec.get('build_stage', 'kernel') == 'kernel'}
+    providers = ctx.board.get('kernel', {}).get('embedded_components', {})
+    if not isinstance(providers, dict):
+        raise Error('[kernel] embedded_components must map component IDs to archive commands')
+    for identifier, command in providers.items():
+        if identifier not in specs:
+            raise Error(f'[kernel] embedded_components: component {identifier} is not selected')
+        if not isinstance(command, str) or command.startswith('component:') or entries.count(command) != 1:
+            raise Error(f'[kernel] embedded_components: {identifier} needs one matching archive command')
+        if 'component:' + identifier in entries:
+            raise Error(f'[kernel] embedded_components: {identifier} also has a standalone recipe')
     result, visited = [], set()
 
     def add_component(identifier):
@@ -97,6 +136,8 @@ def archive_plan(ctx):
         spec = specs.get(identifier)
         if spec is None:
             raise Error(f'[kernel] archives: component {identifier} is not selected')
+        if identifier in providers:
+            raise Error(f'[kernel] archives: {identifier} is needed before its embedded provider')
         for dependency in spec.get('dependencies', []):
             add_component(dependency)
         visited.add(identifier)
@@ -106,11 +147,18 @@ def archive_plan(ctx):
     explicit = any(entry.startswith('component:') for entry in entries)
     if not explicit:
         for identifier in specs:
-            add_component(identifier)
+            if identifier not in providers:
+                add_component(identifier)
     for entry in entries:
         if entry.startswith('component:'):
             add_component(entry[len('component:'):])
         else:
+            # The board command owns ABI binding and linking for these sources.
+            for identifier, command in providers.items():
+                if command == entry:
+                    for dependency in specs[identifier].get('dependencies', []):
+                        add_component(dependency)
+                    visited.add(identifier)
             result.append(('script', entry))
     missing = required - visited
     if missing:
@@ -147,12 +195,43 @@ def build_archives(ctx, env):
             raise Error(f'{key}: {value} not found; supply the archive or its build recipe')
 
 
+def preflight(ctx):
+    """Reject missing archive inputs before runtime or kernel compilation."""
+    missing = []
+    commands = [entry['build'] if kind == 'component' else shlex.split(entry)
+                for kind, entry in archive_plan(ctx)]
+    commands += [spec['build'] for spec in ctx.component_specs if spec.get('build') and
+                 spec.get('build_stage', 'kernel') != 'kernel']
+    runtime = ctx.board.get('payload', {}).get('runtime', {})
+    commands += [shlex.split(runtime[name]) for name in
+                 ('tool', 'data_seed_tool', 'audio_tool', 'wifi_tool', 'bluetooth_tool') if runtime.get(name)]
+    commands += [shlex.split(command) for command in runtime.get('firmware_tools', [])]
+    for parts in commands:
+        command = Path(parts[0])
+        if command.suffix in ('.py', '.sh'):
+            source = command if command.is_absolute() else ctx.tree / (command if command.parts[0] == 'scripts' else Path('scripts') / command)
+            if not source.is_file():
+                missing.append(str(source))
+    for spec in ctx.component_specs:
+        module = ctx.modules[(spec['kind'], spec['id'])]
+        for name in spec.get('source_files', []):
+            if module.path is None or not (module.path / name).is_file():
+                missing.append(f'{spec["id"]}/{name}')
+    if missing:
+        raise Error('Build inputs missing:\n  ' + '\n  '.join(missing))
+    from . import root_policies
+    root_policies.prepare(ctx)
+    log(f'kernel preflight: {len(ctx.component_specs)} selected components - archive inputs present')
+
+
 def build(ctx, modules):
     log('kernel: XNU')
     script = ctx.tree / 'scripts/build-xnu-4k-baseline.sh'
     if not script.is_file():
         raise Error(f'{script} missing')
     env = dict(os.environ)
+    # ar records each member's mtime; without this the archives change on every build and the release reference never hits its cache.
+    env['ZERO_AR_DATE'] = '1'
     if platform.system() == 'Linux':
         for name in ('git', 'make', 'cmake', 'ninja', 'unifdef'):
             tool(name, 'run sudo scripts/linux/setup-toolchain.py')
@@ -164,26 +243,31 @@ def build(ctx, modules):
     env.update(xnu_env(ctx))
     env.update(version_env(modules, ctx))
     if ctx.schema_version == 2:
-        env['UNIXNU_PATCH_LIST'] = str(patches.prepare(ctx, modules))
+        env['UNIXNU_PATCH_LIST'] = str(patches.prepare(ctx, modules, env=env))
         generated = ctx.tree / 'build/generated'
         generated.mkdir(parents=True, exist_ok=True)
         env['UNIXNU_GENERATED_DIR'] = str(generated)
     env['JOBS'] = str(ctx.jobs)
     record = ctx.tree / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o.json'
-    if not record.is_file():
+    framework = ctx.tree / '.cache/fakeroot/System/Library/Frameworks/Kernel.framework/Versions/A'
+    headers_ready = any((framework / directory / 'kern/clock.h').is_file()
+                        for directory in ('Headers', 'PrivateHeaders'))
+    if not record.is_file() or not headers_ready:
         # The archive builders and the boot progress layer read compile records of the XNU build, which only an earlier
         # pass leaves behind. A first build from scratch therefore runs one pass without them; XNU_BOOTSTRAP makes it
         # skip the archive checks and link without the archives, so it stops at the link and only the records are
         # required of it.
-        log('kernel: bootstrap pass for the compile records')
+        log('kernel: bootstrap pass for compile records and kernel headers')
         subprocess_env = {**env, 'XNU_BOOT_PROGRESS': '0', 'XNU_BOOTSTRAP': '1'}
         try:
             run(['bash', script], cwd=ctx.tree, env=subprocess_env, log_file=ctx.logs / 'kernel-bootstrap.log')
         except Error:
-            if not record.is_file():
+            if not record.is_file() or not any((framework / directory / 'kern/clock.h').is_file()
+                                              for directory in ('Headers', 'PrivateHeaders')):
                 raise
-    storage = ctx.tree / 'build/storage-abi/include/IOKit/storage'
-    if (ctx.tree / 'refer/IOStorageFamily').is_dir() and not storage.is_dir():
+    # Revalidate the selected source and regenerate headers on every archive build.
+    # A pre-existing directory can belong to a different OS profile/revision.
+    if (ctx.tree / 'refer/IOStorageFamily').is_dir():
         log('kernel: prepare storage headers')
         run(['python3', ctx.tree / 'scripts/prepare-storage-headers.py'], cwd=ctx.tree, env=env,
             log_file=ctx.logs / 'storage-headers.log')
@@ -191,12 +275,57 @@ def build(ctx, modules):
     run(['bash', script], cwd=ctx.tree, env=env, log_file=ctx.logs / 'kernel.log')
 
 
+def stage_native(kernel, output):
+    """Stage the native executable unchanged for bring-up without prelinked kexts."""
+    data = kernel.read_bytes()
+    if len(data) < 32 or struct.unpack_from('<II', data) != (0xfeedfacf, 0x100000c) or struct.unpack_from('<I', data, 12)[0] != 2:
+        raise Error(f'{kernel} is not an ARM64 MH_EXECUTE native kernel')
+    digest = hashlib.sha256(data).hexdigest()
+    record = {'mode': 'native-only', 'format': 'MH_EXECUTE', 'native': str(kernel.resolve()),
+              'native_sha256': digest, 'candidate_sha256': digest, 'candidate_bytes': len(data),
+              'prelink_skipped': True, 'kernelcache_kexts_added': False, 'boot_verified': False}
+    output.parent.mkdir(parents=True, exist_ok=True)
+    for path, contents in ((output, data), (output.with_suffix('.json'), (json.dumps(record, indent=2) + '\n').encode())):
+        name = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.' + path.name + '.', delete=False) as stream:
+                name = stream.name
+                stream.write(contents)
+            os.replace(name, path)
+        finally:
+            if name and os.path.exists(name):
+                os.unlink(name)
+    log(f'kernel: native only {output} sha256 {digest}')
+    return output
+
+
+def check_prelink_regressions(record, policy):
+    """An experimental allow-missing build may improve, but cannot add gaps."""
+    slide = int(record['collection_slide'], 16)
+    for kind in ('missing', 'stubbed'):
+        for owner, targets in record[kind].items():
+            for target, count in targets.items():
+                original = hex((int(target, 16) - slide) & ((1 << 64) - 1))
+                allowed = policy[kind].get(owner, {}).get(original, 0)
+                if count > allowed:
+                    raise Error(f'prelink regression: {kind} {owner} original {original}, {count} sites (allowed {allowed})')
+    branches = {entry['symbol'] for entry in record.get('native_original_branches', [])}
+    if set(policy.get('required_original_branches', [])) - branches:
+        raise Error('prelink lacks required absolute adapter branch relocations')
+
+
 def prelink(ctx):
     """Produce out/<device>/kernel/kernel.macho from the XNU build and the original kernelcache."""
-    log('kernel: prelink')
     spec = ctx.board.get('kernel', {}).get('prelink')
     if not spec:
         raise Error('board.toml has no [kernel.prelink]')
+    kernel = ctx.tree / spec['kernel']
+    if not kernel.is_file():
+        raise Error(f'{kernel} not found; run "unixnu build kernel" first')
+    output = ctx.work / 'kernel/kernel.macho'
+    if getattr(ctx.args, 'skip_prelink', False):
+        return stage_native(kernel, output)
+    log('kernel: prelink')
     cache = ctx.option('kernelcache', 'UNIXNU_KERNELCACHE') or (expand(ctx.tree / spec['kernelcache']) if spec.get('kernelcache') else None)
     if not cache:
         # Not given: take it from the IPSW (--ipsw PATH_OR_URL, or the url of board.toml [ipsw]).
@@ -206,21 +335,47 @@ def prelink(ctx):
     wanted = spec.get('kernelcache_sha256')
     if wanted and sha256_file(cache) != wanted:
         raise Error(f'{cache} does not match the kernelcache this board was qualified against (sha256 {wanted})')
-    kernel = ctx.tree / spec['kernel']
-    if not kernel.is_file():
-        raise Error(f'{kernel} not found; run "unixnu build kernel" first')
-    output = ctx.work / 'kernel/kernel.macho'
     output.parent.mkdir(parents=True, exist_ok=True)
-    # emit_prelink refuses to overwrite; a rebuild replaces the previous candidate and its record.
-    for stale in (output, output.with_suffix('.json')):
-        stale.unlink(missing_ok=True)
+    # A fileset stays at the native link address and has no slide; the static-prelink format needs one.
     command = ['python3', ctx.tree / spec['tool'], '--kernel', kernel, '--prelinked', cache,
-               f'--slide={spec["slide"]}', '--output', output]
+               f'--slide={spec.get("slide", "0")}']
     for root in spec.get('roots', []):
         command += ['--root', root]
     if spec.get('early_security_init'):
         command += ['--early-security-init', spec['early_security_init']]
     command += spec.get('extra_args', [])
-    run(command, cwd=ctx.tree, log_file=ctx.logs / 'prelink.log')
+    # A failed rebuild must not remove the last candidate or its record.
+    with tempfile.TemporaryDirectory(dir=output.parent, prefix='.prelink-') as directory:
+        candidate = Path(directory) / output.name
+        saved_map = output.with_suffix('.map.json')
+        candidate_map = candidate.with_suffix('.map.json')
+        if saved_map.is_file():
+            shutil.copyfile(saved_map, candidate_map)
+        success = False
+        try:
+            run(command + ['--output', candidate], cwd=ctx.tree, log_file=ctx.logs / 'prelink.log')
+            if not candidate.is_file():
+                raise Error('prelink completed without writing a kernel candidate')
+            if spec.get('regression_policy'):
+                policy = json.loads((ctx.tree / spec['regression_policy']).read_text())
+                if policy['kernelcache_sha256'] != sha256_file(cache):
+                    raise Error('prelink regression policy names another kernelcache')
+                check_prelink_regressions(json.loads(candidate.with_suffix('.json').read_text()), policy)
+            success = True
+        finally:
+            if candidate_map.is_file():
+                os.replace(candidate_map, saved_map)
+            record_path = candidate.with_suffix('.json')
+            if record_path.is_file():
+                record = json.loads(record_path.read_text())
+                record['output'] = str(output.resolve())
+                if record.get('map') == str(candidate_map.resolve()):
+                    record['map'] = str(saved_map.resolve())
+                record_path.write_text(json.dumps(record, indent=2) + '\n')
+                destination = output.with_suffix('.json' if success else '.failed.json')
+                os.replace(record_path, destination)
+                if not success:
+                    log(f'kernel: prelink failed; diagnostic record {destination}')
+        os.replace(candidate, output)
     log(f'kernel: {output} sha256 {sha256_file(output)}')
     return output

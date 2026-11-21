@@ -179,7 +179,7 @@ class SelectionTests(unittest.TestCase):
                     config.Context(fixture.arguments('status', config_file=build))
 
     def test_declared_profile_identity_conflicts_are_rejected(self):
-        cases = (('arch = "arm64"', 'arch = "x86_64"', 'this tree builds arm64 only'),
+        cases = (('arch = "arm64"', 'arch = "x86_64"', 'arch must be arm64 or arm64e'),
                  (f'name = "{PROFILE}"', 'name = "ipados-99.0.0-99Z99"',
                   'not the profile directory name'))
         for old, new, message in cases:
@@ -414,9 +414,12 @@ class IpwAndKernelInputTests(unittest.TestCase):
     def test_missing_and_wrong_kernelcache_fail_before_prelink(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
+            (root / 'tree').mkdir()
+            (root / 'tree/native').write_bytes(b'native')
             ctx = SimpleNamespace(
-                board={'kernel': {'prelink': {'kernelcache_sha256': 'a' * 64}}},
-                tree=root / 'tree', work=root / 'work', logs=root / 'logs')
+                board={'kernel': {'prelink': {'kernel': 'native', 'kernelcache_sha256': 'a' * 64}}},
+                tree=root / 'tree', work=root / 'work', logs=root / 'logs',
+                args=SimpleNamespace(skip_prelink=False))
             missing = root / 'missing.cache'
             ctx.option = lambda flag, env=None: missing
             with patch.object(kernel, 'log'):

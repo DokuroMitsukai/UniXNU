@@ -15,6 +15,7 @@ These repositories are maintained in the UniXNU organization.
 | RamBlock | [UniXNU/RamBlock](https://github.com/UniXNU/RamBlock) | XNU storage | [RamBlock](/drivers/ram-block) |
 | GopFramebuffer | [UniXNU/GopFramebuffer](https://github.com/UniXNU/GopFramebuffer) | XNU display | [GopFramebuffer](/drivers/gop-framebuffer) |
 | QcomGeniSpi | [UniXNU/QcomGeniSpi](https://github.com/UniXNU/QcomGeniSpi) | XNU SPI | [QcomGeniSpi](/drivers/qcom-geni-spi) |
+| QcomBaseband | [UniXNU/QcomBaseband](https://github.com/UniXNU/QcomBaseband) | XNU baseband | [QcomBaseband](/drivers/qcom-baseband) |
 | SoftwareAES | [UniXNU/SoftwareAES](https://github.com/UniXNU/SoftwareAES) | XNU crypto | [SoftwareAES](/drivers/software-aes) |
 | AppleKeyStoreState | [UniXNU/AppleKeyStoreState](https://github.com/UniXNU/AppleKeyStoreState) | XNU keystore | [AppleKeyStoreState](/drivers/apple-key-store-state) |
 | VirtioMmioBlock | [UniXNU/VirtioMmioBlock](https://github.com/UniXNU/VirtioMmioBlock) | XNU storage | [VirtioMmioBlock](/drivers/virtio-mmio-block) |
@@ -22,6 +23,8 @@ These repositories are maintained in the UniXNU organization.
 | ShengNovatekTouch | [UniXNU/ShengNovatekTouch](https://github.com/UniXNU/ShengNovatekTouch) | XNU touch | [ShengNovatekTouch](/drivers/sheng-novatek-touch) |
 | XnuPrelink | [UniXNU/XnuPrelink](https://github.com/UniXNU/XnuPrelink) | Kernel tooling | [XnuPrelink](/drivers/xnu-prelink) |
 | Ath12kWifi | [UniXNU/Ath12kWifi](https://github.com/UniXNU/Ath12kWifi) | XNU Wi-Fi | [Ath12kWifi](/drivers/ath12k-wifi) |
+| QcaBluetooth | [UniXNU/QcaBluetooth](https://github.com/UniXNU/QcaBluetooth) | XNU Bluetooth |  |
+| QcomDwc3 | [UniXNU/QcomDwc3](https://github.com/UniXNU/QcomDwc3) | XNU USB |  |
 | ArmCpu | [UniXNU/ArmCpu](https://github.com/UniXNU/ArmCpu) | XNU CPU and GIC | [ArmCpu](/drivers/arm-cpu) |
 | ArmDTPlatform | [UniXNU/ArmDTPlatform](https://github.com/UniXNU/ArmDTPlatform) | XNU platform expert | [ArmDTPlatform](/drivers/arm-dt-platform) |
 | ArmVirtPlatform | [UniXNU/ArmVirtPlatform](https://github.com/UniXNU/ArmVirtPlatform) | XNU platform | [ArmVirtPlatform](/drivers/arm-virt-platform) |
@@ -29,6 +32,7 @@ These repositories are maintained in the UniXNU organization.
 | AirNir | [UniXNU/AirNir](https://github.com/UniXNU/AirNir) | Compiler kit | [AirNir](/drivers/air-nir) |
 | AdrenoPM4 | [UniXNU/AdrenoPM4](https://github.com/UniXNU/AdrenoPM4) | GPU command kit | [AdrenoPM4](/drivers/adreno-pm4) |
 | AdrenoFirmware | [UniXNU/AdrenoFirmware](https://github.com/UniXNU/AdrenoFirmware) | GPU firmware kit | [AdrenoFirmware](/drivers/adreno-firmware) |
+| Sm8550Platform | [UniXNU/UniXNU-sm8550-common](https://github.com/UniXNU/UniXNU-sm8550-common) | SM8550 GPU platform kit | [Sm8550Platform](/drivers/sm8550-platform) |
 | DarwinBoot | [UniXNU/DarwinBoot](https://github.com/UniXNU/DarwinBoot) | UEFI loader | [DarwinBoot](/drivers/darwin-boot) |
 | VerifiedRoot | [UniXNU/VerifiedRoot](https://github.com/UniXNU/VerifiedRoot) | Root trust tooling | [VerifiedRoot](/drivers/verified-root) |
 | ShengPreflight | [UniXNU/ShengPreflight](https://github.com/UniXNU/ShengPreflight) | UEFI preflight | [ShengPreflight](/drivers/sheng-preflight) |
@@ -50,6 +54,7 @@ These repositories are maintained by their owners. They are linked from the devi
 | NativeEmmc | Redmi Note 9 | [Dracen-W/NativeEmmc](https://github.com/Dracen-W/NativeEmmc) | [NativeEmmc](/drivers/community-native-emmc) |
 | NativeDwc3 | Xiaomi Pad 5 | [Lux12138/NativeDwc3](https://github.com/Lux12138/NativeDwc3) | [NativeDwc3](/drivers/community-native-dwc3) |
 | unixnu-nativefocaltechtouch | Galaxy Tab S7 FE Wi-Fi | [RigoLigoRLC/unixnu-nativefocaltechtouch](https://github.com/RigoLigoRLC/unixnu-nativefocaltechtouch) | [unixnu-nativefocaltechtouch](/drivers/community-nativefocaltechtouch) |
+| Adreno830 | OnePlus 13T (SM8750) | [Shad0w23333/Adreno830](https://github.com/Shad0w23333/Adreno830) | [Adreno830](/drivers/community-adreno830) |
 
 ## Device forks
 

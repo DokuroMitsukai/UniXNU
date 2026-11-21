@@ -14,10 +14,12 @@ UniXNU-<device>/
   board.toml
   porting.toml
   .github/workflows/porting-record.yml
+  .github/workflows/package.yml
   feeds.toml
   configs/<device>_defconfig
   dts/<device>.dts
   patches/xnu/series
+  scripts/package.sh
   proprietary-files.txt
   package/
   local.toml.example
@@ -47,6 +49,7 @@ UniXNU-<device>/
 | `package/`、板级代码和构建配方 | 所选组件与板级服务具备构建配方、启动接入和所需 OS ABI 输入 |
 | `proprietary-files.txt`、固件配置 | 固件来源与哈希、DSC/FDF 集成、分区几何和镜像输入完整 |
 | `porting.toml`、`.github/workflows/porting-record.yml` | 每个所选组件及依赖都有对应区域；记录实际源码、主机和设备结果；启用记录检查 |
+| `.github/workflows/package.yml` | [设备打包脚本](/zh/porting/packaging)的打包 action |
 | `README.md`、`AGENTS.md` | 设备范围、前置条件、构建命令，以及通用指南和设备记录链接 |
 | `.gitignore`、`local.toml.example` | 忽略本机覆盖文件与生成目录；说明示例路径 |
 
@@ -73,7 +76,8 @@ python3 scripts/porting-record.py check --device "$DEVICE_DIR"
 `tree/kits/<board.kit>/`。记录检查器输出已检查的结构化区域数量；发布前解决报告的错误。
 
 编译[板级 DTS](/zh/porting/device-tree)，再按[构建指南](/zh/building)生成内核、package、
-固件、payload 和启动镜像。记录每条命令、版本、输出与结果。按[启动验证](/zh/porting/bring-up)
+固件、payload 和启动镜像。设备仓库还带有[设备打包脚本](/zh/porting/packaging)，
+从干净检出、无需修改即可产出同样两项产物。记录每条命令、版本、输出与结果。按[启动验证](/zh/porting/bring-up)
 和[日志抓取](/zh/porting/log-capture)单独记录硬件检查点，并为各区域填写有证据支持的
 [完成等级](/zh/porting/records#completion-levels)。
 
@@ -99,10 +103,9 @@ python3 scripts/porting-record.py check --device "$DEVICE_DIR"
    输出应包含 `unixnu`。使用 GitHub 网页时，在仓库的 **About** 设置中编辑 **Topics**。
    设备仓库可通过 [github.com/topics/unixnu](https://github.com/topics/unixnu) 查找。
 4. 确认已发布提交的移植记录工作流通过。官方设备分支要求 `Porting record` 检查通过。
-5. 接入中央站点时，在 `devices.toml` 固定该提交，添加中英文设备页面，并从
-   [设备列表](/zh/devices/)链接它们。按[记录发布](/zh/porting/records#发布与复用)
-   和[文档贡献](/zh/contributing/documentation)操作，在 UniXNU 运行
-   `npm --prefix docs run build`，确认渲染的记录使用已发布版本。
+5. 发布 `board.toml` 和有效的 `porting.toml`。每天两次的目录工作流固定源码版本，
+   生成格式 2 设备页和导航。按[记录发布](/zh/porting/records#publishing-and-reuse)
+   手动触发扫描或在本地预览，再确认[设备页面](/zh/devices/)链接到已发布版本。
 
 **结果：** 已发布的设备仓库包含源码固定版本、可复现命令、通过检查的移植记录、CI、
 通用指南链接和 `unixnu` topic。
@@ -113,17 +116,17 @@ python3 scripts/porting-record.py check --device "$DEVICE_DIR"
 schema_version = 2
 
 [board]
-name = "sheng"
+name = "myboard"
 soc = "SM8550"
 soc_source = "sm8550"
 os_profile = "ipados-17.7.11-21H461"
-kit = "sheng"
+kit = "myboard"
 
 [components]
 include = ["ArmDTPlatform", "ArmCpu", "Adreno740", "AdrenoMetal", "ShengUfs", "ShengHidInput", "ShengNovatekTouch", "GopFramebuffer"]
 
 [device_tree]
-source = "device:dts/sheng.dts"
+source = "device:dts/myboard.dts"
 include_dirs = ["soc:dts"]
 ```
 
@@ -137,6 +140,10 @@ include_dirs = ["soc:dts"]
 表按键合并，普通数组替换继承数组。组件依赖按构建顺序补全。`unixnu status --json`
 显示最终设置、源码、覆盖项和补丁顺序。
 
+`[os_overrides."<profile>"]` 保存某个 OS 配置特有的值，`[package.defconfig]`
+把每个配置映射到它的 defconfig。`--os` 为单条命令选择配置。字段见
+[配置参考](/zh/reference/configuration)，完整的覆盖示例见 [macOS 的值](/zh/porting/macos#device)。
+
 省略 `schema_version` 的文件使用格式 1 及其模块路径。格式 2 的输出位于
 `out/<device>/<os_profile>/<config>/`，其中 `<config>` 为去掉 `_defconfig` 的配置名。
 
@@ -144,7 +151,7 @@ include_dirs = ["soc:dts"]
 
 ```toml
 [kernel]
-defconfig = "sheng_defconfig"
+defconfig = "myboard_defconfig"
 config_fragments = ["arch:configs/common.config", "soc:configs/sm8550.config"]
 patch_series = ["arch:patches/xnu/series", "soc:patches/xnu/series", "os:patches/xnu/series", "device:patches/xnu/series"]
 ```
@@ -218,13 +225,11 @@ fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustC
 first_lba = 0x0
 last_lba = 0x0
 lba_bytes = 4096
-windows = [
-  { name = "OS", component = "OS" },
-  { name = "SystemOS", component = "Cryptex1,SystemOS" },
-]
 ```
 
-`first_lba` 和 `last_lba` 来自名为 `userdata` 的 GPT 条目，`lba_bytes` 是逻辑块大小。每个窗口指定 IPSW 磁盘镜像组件。
+`first_lba` 和 `last_lba` 来自名为 `userdata` 的 GPT 条目，`lba_bytes` 是逻辑块大小。
+
+OS 配置在 `[userdata] windows` 中列出 IPSW 磁盘镜像。IPSW 没有某个 `optional = true` 的窗口时跳过它。
 
 ### 内核
 
@@ -379,7 +384,7 @@ CONFIG_XNU_OWNER_CACHE_VOLUME_UUID="00000000-0000-0000-0000-000000000000"
 
 取值可以是 `y`、`n`、数字或带引号字符串。每个 `CONFIG_XNU_<NAME>` 变成内核构建的 `XNU_<NAME>`，字符串中的 `{tree}` 替换为构建树路径。
 
-`CONFIG_XNU_OWNER_CACHE_VOLUME_UUID` 指定 owner 链作为缓存载体挂载的 SystemOS cryptex 卷，即签名 SystemOS 策略所覆盖镜像中的 APFS 卷 UUID。不设置时，内核使用 sheng 镜像的卷。
+`CONFIG_XNU_OWNER_CACHE_VOLUME_UUID` 指定 owner 链作为缓存载体挂载的 SystemOS cryptex 卷，即签名 SystemOS 策略所覆盖镜像中的 APFS 卷 UUID。不设置时，内核使用内置的卷 UUID。
 
 ## feeds.toml
 
@@ -477,5 +482,4 @@ entry = "<entry id>"
 完成条件，记录字段与 `board.toml` 及组件依赖匹配。设备 CI 检查代码路径对应部分
 的经验或证据更新。字段、状态和发布流程见[记录指南](/zh/porting/records)。
 
-板级驱动子模块归属设备仓库。sheng 在设备仓库固定 ShengUfs、ShengHidInput、
-ShengNovatekTouch 和 ShengPreflight。
+板级驱动子模块归属设备仓库。在其中固定所选组件版本，记录板级输入与构建配方。

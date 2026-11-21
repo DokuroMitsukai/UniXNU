@@ -28,7 +28,7 @@ to `kernel.macho`. DarwinBoot reads it from the payload entry directory.
 
 ```toml
 [device_tree]
-source = "device:dts/sheng.dts"
+source = "device:dts/myboard.dts"
 include_dirs = ["soc:dts"]
 ```
 
@@ -43,8 +43,8 @@ The board DTS includes its SoC DTSI:
 /include/ "sm8550.dtsi"
 
 / {
-    model = "Xiaomi Pad 6S Pro";
-    compatible = "xiaomi,sheng", "qcom,sm8550";
+    model = "Example SM8550 device";
+    compatible = "vendor,myboard", "qcom,sm8550";
 };
 ```
 
@@ -56,7 +56,7 @@ See the [device template](/porting/device-repository) and [SoC support](/porting
 | Property | Input | ADT representation |
 | --- | --- | --- |
 | `compatible`, `device_type`, `reg-names`, `interrupt-names`, `clock-names`, `method` | NUL-terminated strings | String bytes |
-| `phandle`, `linux,phandle`, `#interrupt-cells`, `#iommu-cells`, `clock-frequency`, `timebase-frequency` | One big-endian cell | Little-endian u32 |
+| `phandle`, `linux,phandle`, `#interrupt-cells`, `#iommu-cells`, `clock-frequency`, `timebase-frequency`, `transport-encoding`, `transport-speed` | One big-endian cell | Little-endian u32 |
 | `redistributor-stride` | One or two cells | Little-endian u64 |
 | `interrupt-controller`, `dma-coherent` | Empty property | Empty property |
 | `reg` | Address/size tuples using the parent's cell widths | Translated physical u64 address/size pairs |
@@ -64,6 +64,7 @@ See the [device template](/porting/device-repository) and [SoC support](/porting
 | `interrupt-parent` | Controller phandle | Little-endian phandle |
 | `iommus`, `clocks` | Phandle and provider-defined argument cells | Little-endian cells |
 | `unixnu,adt-name` | Exported hardware node name | Child name under `/arm-io` |
+| `unixnu,cluster-type` | `"E"` or `"P"` on a CPU node | `cluster-type`, the character as a little-endian u32 |
 | `status` | `okay`, `ok`, or disabled state | Selects enabled nodes |
 
 Every translated bus declares `ranges`. An empty `ranges` gives an identity
@@ -99,9 +100,17 @@ platform identity, root matching, and payload memory-map placeholders.
 
 ## Standalone conversion
 
+Set the device and SoC source paths. Export `UNIXNU_UNIQUE_CHIP_ID` with the
+target platform seed and select the OS profile before conversion:
+
 ```sh
-dtc -I dts -O dtb -i ../UniXNU-sm8550-common/dts   -o /tmp/sheng.dtb ../UniXNU-sheng/dts/sheng.dts
-python3 scripts/make-adt.py --dtb /tmp/sheng.dtb   --os-profile profiles/os/ipados-17.7.11-21H461/profile.toml   --board ../UniXNU-sheng/board.toml --unique-chip-id <hex>   --data-ramdisk --trust-cache --output /tmp/kernel.macho.adt
+DEVICE_DIR=/path/to/device
+SOC_DTS=/path/to/soc/dts
+dtc -I dts -O dtb -i "$SOC_DTS" -o /tmp/board.dtb "$DEVICE_DIR/dts/myboard.dts"
+python3 scripts/make-adt.py --dtb /tmp/board.dtb \
+  --os-profile profiles/os/ipados-17.7.11-21H461/profile.toml \
+  --board "$DEVICE_DIR/board.toml" --unique-chip-id "$UNIXNU_UNIQUE_CHIP_ID" \
+  --data-ramdisk --trust-cache --output /tmp/kernel.macho.adt
 ```
 
 The command selects memory-map placeholders for the supplied payload inputs.
@@ -295,5 +304,5 @@ The QEMU generator is the smallest complete example. The device page in [Devices
 ## Next steps
 
 - [Payload](/concepts/payload)
-- [Device tree matching](/drivers/device-tree-matching)
+- [Provider matching](/porting/driver-development#matching)
 - [Bring-up order](/porting/bring-up)

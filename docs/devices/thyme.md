@@ -13,6 +13,7 @@ The Coryyi board file identifies Mi 10S and records measured SM8250-family board
 
 ## Sources
 
+- [Board configuration: tobyfox1640/UniXNU-thyme](https://github.com/tobyfox1640/UniXNU-thyme/blob/8efba539ce54b34e576e71799498d287c6eba894/board.toml)
 - [Board configuration: Coryyi/UniXNU-thyme](https://github.com/Coryyi/UniXNU-thyme/blob/8728dc4666759998a7873966bd220702af638fec/board.toml)
 
 ## Use this port

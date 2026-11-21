@@ -50,8 +50,11 @@ The host tests supply a fake bus. The kernel probe supplies the GENI SPI transfe
 6. Reject blobs above the palm node count.
 7. Compute a weighted centroid per blob.
 8. Apply edge compensation.
-9. Track contacts across frames with a radius and a down/up threshold.
-10. Report contacts from the second frame of a slot.
+9. Track contacts across frames using distance and signal thresholds. A new contact requires at least two sensor nodes above the noise floor.
+10. Confirm tip-down on the second scan and report the first position so HID can identify edge starts.
+11. Update the panel reference after eight complete scans without a finger or palm.
+
+During a pinch, distinct peaks assigned to established fingers stay separate. A quiet matrix releases the contacts. A partial dropout can retain the last reported position for up to three scans and rejoin near the predicted position.
 
 The core has no allocation. Its scratch arrays live in `struct nvt_touch_core`, which the probe allocates once. The comments record why: kernel thread stacks are 16 KiB and the scratch is larger.
 
@@ -88,7 +91,7 @@ The clock helpers are pure functions. `tb_choose_clock` selects the DFS level an
 
 ## Probe stages
 
-The probe is off by default. The boot argument `sheng-touch=<n>` selects a stage:
+The probe is off by default. The boot argument `touch=<n>` selects a stage:
 
 | Stage | Work |
 | --- | --- |
@@ -129,6 +132,13 @@ volatile int native_touch_ids[NVT_SLOTS];
 
 The writer increments the sequence before and after the update, so the reader detects a torn snapshot. `ShengHidInput` reads the snapshot and emits digitizer reports.
 
+On sheng, enable `tlog=1` with diagnostic export to capture `kernel.touchpath.bin`.
+Run `python3 scripts/decode-sheng-touchpath.py kernel.touchpath.bin --jsonl paths.jsonl` from the device repository.
+Each row follows a physical contact from its first observed centroid in units of 0.1 panel pixel.
+It includes raw and filtered displacement, holds, release, edge classification and the HID submission result.
+The three uptime timestamps mark the most recent IRQ before reading, completion of the SPI read and return from publishing the contact set.
+They can be compared with display flips in `kernel.rings.txt`.
+
 ## Adapting the example
 
 1. Keep the pure processing layer separate from the bus.
@@ -142,4 +152,4 @@ The writer increments the sequence before and after the update, so the reader de
 
 - [XNU drivers](/drivers/xnu-drivers)
 - [Device tree matching](/drivers/device-tree-matching)
-- [sheng device page](/devices/sheng)
+- [Reference device record](/devices/sheng)

@@ -38,8 +38,7 @@ UniXNU 根目录的 `components.toml` 记录维护中的组件。配置通过 `[
 | `outputs` | 目标树中的输出路径 |
 | `runtime_identifiers` | 源文件名、类名、bundle/plugin ID、符号和协议 |
 
-实现范围和硬件验证分别记录。Adreno740 实现 SM8550 使用的 A740 GPU 接口，sheng
-是已有硬件验证记录的设备。AdrenoMetal 通过 metal2vulkan 和 Turnip 提供 Metal
+实现范围和硬件验证分别记录。Adreno740 实现 SM8550 使用的 A740 GPU 接口。AdrenoMetal 通过 metal2vulkan 和 Turnip 提供 Metal
 前端，依赖内核接口和 OS ABI。
 
 ## 选择
@@ -51,15 +50,33 @@ include = ["ArmDTPlatform", "ArmCpu", "Adreno740", "AdrenoMetal", "GopFramebuffe
 
 内核阶段构建命令按依赖顺序运行。`[kernel] archives` 可以在辅助命令之间用 `component:<ID>` 指定组件位置。payload、固件、预链接和嵌入式条目描述对应阶段的集成。
 
+辅助命令按板级 ABI 编译选中的组件时，在 `[kernel.embedded_components]` 中声明构建归属：
+
+```toml
+[kernel.embedded_components]
+SoftwareAES = "build-gop-legacy-display-27.py"
+```
+
+该命令须在 `archives` 中出现一次，负责组件的编译和链接，替代独立构建命令。
+
 设备的 `include` 数组替换继承的数组。完整列出所需组件，解析器补全依赖。查看组件
 选择、源码版本、本地覆盖和构建顺序：
 
 ```sh
-./unixnu status --json -D ../UniXNU-sheng
+./unixnu status --json -D /path/to/device
 ```
 
 实现能力前，搜索组件目录、[组件页面](/zh/drivers/repositories)、README 和源码，
 核对接口、硬件范围、OS 要求与板级输入。
+
+新组件发布到目录前，可以显式选择本地源码：
+
+```sh
+./unixnu tree -D /path/to/device --local-module driver:MyDriver=/path/to/MyDriver
+```
+
+新模块会链接到装配树，由使用它的板级代码提供集成步骤。目录中已有的组件仍需在
+配置中选中。
 
 ## 源码身份
 

@@ -10,7 +10,7 @@ For a complete workflow, follow [Port a device](/porting/steps) or
 | Change | File or implementation | Procedure |
 | --- | --- | --- |
 | Local input paths | Main checkout `unixnu.local.toml` | [Configure build inputs](/reference/configuration#local-build-inputs) |
-| Device, SoC or component selection | Device `board.toml`, `feeds.toml`, `configs/` | [Resolve the port](/porting/#_4-resolve-and-inspect-the-build) |
+| Device, SoC or component selection | Device `board.toml`, `feeds.toml`, `configs/` | [Resolve the port](/porting/steps#_4-resolve-and-inspect-the-build) |
 | Hardware resources | SoC DTSI and board DTS | [Device tree](/porting/device-tree#procedure) |
 | Driver behavior | Selected component or board package | [Adapt hardware](/porting/drivers), [develop a driver](/drivers/overview#procedure) |
 | Kernel behavior | Owning profile or component patch series | [Change XNU](/xnu/source-and-patches#procedure) |

@@ -1,8 +1,8 @@
 # Platform, memory and OS services
 
 Start with a [resolved device repository](/porting/steps). Read the
-[device-tree bindings](/porting/device-tree), [matching rules](/drivers/device-tree-matching),
-[ArmDTPlatform](/drivers/arm-dt-platform) and [ArmCpu](/drivers/arm-cpu).
+[device-tree bindings](/porting/device-tree), [matching rules](/porting/driver-development#matching),
+`ArmDTPlatform` and `ArmCpu`.
 
 Use [driver build integration](/porting/drivers#build-integration) to connect
 initialization, archive recipes and the OS ABI, then run this page's hardware checks.
@@ -10,7 +10,7 @@ initialization, archive recipes and the OS ABI, then run this page's hardware ch
 ## Sources and interfaces {#source-map}
 
 These links identify reviewed source revisions. Match interfaces to the selected
-SoC, component and OS versions. Files in `UniXNU-sheng` provide board integration
+SoC, component and OS versions. The linked device sources provide board integration
 examples.
 
 | Implementation | Source | What to read and implement |
@@ -44,6 +44,23 @@ CPU receives timer interrupts, and each enabled secondary CPU reaches its entry
 and receives IPIs. On another GIC or PSCI interface, review ArmCpu's implementation
 before enabling additional cores.
 
+### Efficiency and performance clusters {#clusters}
+
+On a SoC with two core types, tag every CPU node in the board DTS with
+`unixnu,cluster-type = "E"` or `"P"`. The ADT then carries each CPU's
+`cluster-type`, and a scheduler patch runs XNU's Edge scheduler with one E and
+one P cluster. The SM8550 reference:
+
+| Input | Reference value |
+| --- | --- |
+| E cluster | cpu0 to cpu2 (Cortex-A510) |
+| P cluster | cpu3 to cpu7 (Cortex-A715, A710 and X3) |
+| DTS | [`dts/sheng.dts`](https://github.com/UniXNU/UniXNU-sheng/blob/main/dts/sheng.dts) |
+| Scheduler patch | [`patches/xnu/zzyf-sheng-amp.patch`](https://github.com/UniXNU/UniXNU-sheng/blob/main/patches/xnu/zzyf-sheng-amp.patch) |
+
+The patch keeps UI threads on the P cluster. Check the result with the CPU
+governor's per-domain busy share: UI work should load the P domains.
+
 ## 2. Account for memory and DMA
 
 Compare firmware RAM, secure carveouts, framebuffer, DSP/GPU firmware, payload
@@ -52,7 +69,7 @@ the loader's owned-memory request has its own size and alignment constraints.
 Keep both consistent with the actual UEFI memory map.
 
 For each DMA device, record address width, physical-to-IOVA mapping, SMMU
-instance/stream/context ownership and cache policy. Read [ArmSmmu4K](/drivers/arm-smmu4k)
+instance/stream/context ownership and cache policy. Read `ArmSmmu4K`
 where its translation model matches the target. GPU, UFS, SPI and PCIe may use
 different streams and allocation policies. Trace the consumer's MMIO and mapping inputs to DTS properties or board constants.
 
@@ -64,14 +81,14 @@ Continue with [UFS adaptation](/porting/ufs) for the storage controller.
 
 | Component | Adaptation work | Expected observation |
 | --- | --- | --- |
-| [RamBlock](/drivers/ram-block) | Match dense/packed Data format and ADT placeholders. Implement the `native_ufs_store` persistence callbacks for the target storage policy | Data mounts; writes and restart behavior match the selected persistence mode |
-| [VirtioMmioBlock](/drivers/virtio-mmio-block) | Supply a VirtIO MMIO device, queues, DMA and interrupt routing; qualify storage ABI bindings | Capacity and reads are correct before mounting root |
-| [VerifiedRoot](/drivers/verified-root) | Supply the selected image's owner policy and trust inputs; connect the storage policy archive | Policy validation succeeds for the intended image |
-| [SoftwareAES](/drivers/software-aes) | Match XNU AES helpers and IOCryptoAcceleratorFamily ABI; build its bindings for the OS profile | The crypto service publishes and required volume operations complete |
-| [AppleKeyStoreState](/drivers/apple-key-store-state) | Qualify selectors and state callbacks against the OS; connect initialization and event callers | Required state queries and notifications complete |
-| [XnuPrelink](/drivers/xnu-prelink) | Select matching XNU, original kernelcache, archive bindings and patch order | Prelink resolves the selected drivers and produces the kernel |
-| [DarwinBoot](/drivers/darwin-boot) | Include the loader in firmware or payload; provide Mach-O, ADT and selected sidecars | Loader validates the inputs and reports kernel handoff |
-| [ShengPreflight](/drivers/sheng-preflight) | Read its sheng checks, then write checks for the target's firmware and memory layout | Target-specific firmware inputs pass their checks |
+| `RamBlock` | Match dense/packed Data format and ADT placeholders. Implement the `native_ufs_store` persistence callbacks for the target storage policy | Data mounts; writes and restart behavior match the selected persistence mode |
+| `VirtioMmioBlock` | Supply a VirtIO MMIO device, queues, DMA and interrupt routing; qualify storage ABI bindings | Capacity and reads are correct before mounting root |
+| `VerifiedRoot` | Supply the selected image's owner policy and trust inputs; connect the storage policy archive | Policy validation succeeds for the intended image |
+| `SoftwareAES` | Match XNU AES helpers and IOCryptoAcceleratorFamily ABI; build its bindings for the OS profile | The crypto service publishes and required volume operations complete |
+| `AppleKeyStoreState` | Qualify selectors and state callbacks against the OS; connect initialization and event callers | Required state queries and notifications complete |
+| `XnuPrelink` | Select matching XNU, original kernelcache, archive bindings and patch order | Prelink resolves the selected drivers and produces the kernel |
+| `DarwinBoot` | Include the loader in firmware or payload; provide Mach-O, ADT and selected sidecars | Loader validates the inputs and reports kernel handoff |
+| `ShengPreflight` | Read its board checks, then write checks for the target's firmware and memory layout | Target-specific firmware inputs pass their checks |
 
 Use [prelink](/concepts/prelink), [integrity policy](/concepts/security),
 [payload](/concepts/payload) and [userdata](/guide/userdata) for the required

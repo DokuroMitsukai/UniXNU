@@ -8,13 +8,13 @@
 
 ## 当前状态
 
-macOS 26.5 的 QEMU 路径已运行原始 arm64e `launchd`、`sh` 和 `bash`，使用临时 Data 卷，并到达 Aqua 初始化。WindowServer 的 HID 和显示集成待完成。
+配对的 macOS 26.5 / 25F71 内核与恢复用户态已在 QEMU 和 sheng 实机运行原始 arm64e `launchd`。实机记录覆盖 BaseSystem 与 ISC 挂载、临时 Data 和模板复制。日志可保存到 `macoslog` 并在重启后读回。
 
-sheng 实机记录的结果为 UEFI EL1 探针，QEMU 用户态结果使用独立的配置和验证记录。
+WindowServer 在 HID 和显示初始化期间反复退出，图形 Recovery 待完成。配对输入和设备配置按当前状态记录选择。
 
 ## 来源
 
-- [README: Jelly10086/macOS-ForSheng](https://github.com/Jelly10086/macOS-ForSheng/blob/daec3714f8b4e12f5cd129efa79be894511353e5/README.md)
+- [状态: Jelly10086/macOS-ForSheng](https://github.com/Jelly10086/macOS-ForSheng/blob/4ec9620f127fe0daa7e9e9498ee7b0d374fd032f/docs/status.md)
 
 ## 使用此移植
 

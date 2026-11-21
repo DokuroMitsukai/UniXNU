@@ -17,13 +17,21 @@ def merge(base, overlay):
 
 
 def resolve_os(ctx, wanted):
-    """--os 17, 26 or 27 (the OS major version) or a full profiles/os directory name."""
+    """--os 17, 26 or 27 (the OS major version) or a full profiles/os directory name.
+    A bare version resolves within the iPadOS profiles; prefix it with macos- (macos-27,
+    macos-27.3) or ipados- (ipados-27) when several OS families ship the same major."""
     names = sorted(path.name for path in (ctx.root / 'profiles/os').iterdir() if path.is_dir())
     if wanted in names:
         return wanted
-    matches = [name for name in names if name.startswith(f'ipados-{wanted}.')]
+    family, version = 'ipados-', wanted
+    for prefix in ('ipados-', 'macos-'):
+        if wanted.startswith(prefix):
+            family, version = prefix, wanted[len(prefix):]
+            break
+    matches = [name for name in names
+               if name.startswith(f'{family}{version}.') or name.startswith(f'{family}{version}-')]
     if len(matches) != 1:
-        raise Error(f'--os {wanted}: expected one of {", ".join(names)} or 17, 26, 27')
+        raise Error(f'--os {wanted}: expected one of {", ".join(names)} or 17, 26, 27, macos-27')
     return matches[0]
 
 
@@ -55,24 +63,26 @@ def load(ctx, allow_fetch=False):
     ctx.soc = feeds.resolve_soc(ctx, soc_name, allow_fetch)
     os_toml = load_toml(os_root / 'profile.toml')
     arch_name = os_toml.get('os', {}).get('arch', 'arm64')
-    if arch_name != 'arm64':
-        raise Error(f'{os_name}: [os] arch is {arch_name}; this tree builds arm64 only')
+    if arch_name not in ('arm64', 'arm64e'):
+        raise Error(f'{os_name}: [os] arch must be arm64 or arm64e')
     declared = os_toml.get('os', {}).get('name')
     if declared and declared != os_name:
         raise Error(f'{os_name}: [os] name is {declared}, not the profile directory name')
     ctx.os_name = os_name
-    ctx.profile_roots = {'arch': ctx.root / 'profiles/arch/arm64', 'soc': ctx.soc.path,
+    ctx.profile_roots = {'arch': ctx.root / 'profiles/arch' / arch_name, 'soc': ctx.soc.path,
                          'os': os_root, 'device': ctx.device}
     ctx.profile_files = [ctx.profile_roots['arch'] / 'profile.toml', ctx.soc.path / 'soc.toml',
                          os_root / 'profile.toml', ctx.device / 'board.toml']
     result = {}
     for path in ctx.profile_files:
         result = merge(result, load_toml(path))
+    # board.toml [os_overrides."<profile>"] holds the board values that differ for one OS profile (kernel archives, kernel
+    # arguments); the table of the selected profile is merged over the board, the others are dropped.
     overrides = result.pop('os_overrides', {})
     chosen = deepcopy(overrides.get(os_name, {}))
     removed = chosen.pop('remove', [])
     result = merge(result, chosen)
-    for dotted in removed:
+    for dotted in removed:   # keys the board sets for other profiles and this one does not have
         *parents, leaf = dotted.split('.')
         node = result
         for key in parents:
@@ -83,8 +93,8 @@ def load(ctx, allow_fetch=False):
         result['package'] = deepcopy(ctx.raw_board['package'])
     result.setdefault('board', {})['os_profile'] = os_name
     resolved_arch = result.get('os', {}).get('arch', 'arm64')
-    if resolved_arch != 'arm64':
-        raise Error(f'{os_name}: resolved [os] arch is {resolved_arch}; this tree builds arm64 only')
+    if resolved_arch not in ('arm64', 'arm64e'):
+        raise Error(f'{os_name}: resolved [os] arch is {resolved_arch}; expected arm64 or arm64e')
     resolved_name = result.get('os', {}).get('name')
     if resolved_name and resolved_name != os_name:
         raise Error(f'{os_name}: resolved [os] name is {resolved_name}, not the profile directory name')

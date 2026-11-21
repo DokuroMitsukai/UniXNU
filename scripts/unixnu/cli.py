@@ -1,3 +1,4 @@
+from pathlib import Path
 """Command line of the UniXNU build driver."""
 import argparse
 import json
@@ -5,12 +6,12 @@ import platform
 import shutil
 import sys
 
-from . import bootimg, components, feeds, firmware, ipsw, kernel, package, patches, payload, pipeline, profiles, tree, userdata
+from . import bootimg, components, feeds, firmware, ipsw, kernel, package, patches, payload, pipeline, profiles, runtime, toolchain, tree, userdata, vendor_boot
 from .config import LOCAL_KINDS, Context, parse_config
 from .util import Error, expand, git, log
 
 STEPS = ('kernel', 'package', 'firmware', 'payload')
-OPTIONAL_STEPS = ('userdata',)   # large; built only when named
+OPTIONAL_STEPS = ('userdata', 'runtime')
 
 
 def common():
@@ -25,19 +26,27 @@ def common():
         p.add_argument(f'--local-{kind}', metavar='DIR', help=f'use DIR as the {kind} directory (beats --local)')
     p.add_argument('--local-module', action='append', metavar='[KIND:]NAME=PATH', help='use PATH for one module (beats everything)')
     p.add_argument('--uefi', metavar='DIR', help='Mu-Silicium checkout for the device (uefi-sheng); or UNIXNU_UEFI')
+    p.add_argument('--clang-bin', metavar='DIR', help='EDK II clang, lld-link, llvm-lib and llvm-rc directory; or CLANG_BIN')
     p.add_argument('--edk2', metavar='DIR', help='Mu_Basecore checkout; or UNIXNU_EDK2')
+    p.add_argument('--kernel-sdk', metavar='DIR', help='exported iPhoneOS SDK for kernel and prelink; or UNIXNU_KERNEL_SDK')
+    p.add_argument('--kernel-tools', metavar='DIR', help='exported toolchain bin directory for kernel and prelink; or UNIXNU_KERNEL_TOOLS')
     p.add_argument('--kernelcache', metavar='FILE', help='original decompressed kernelcache; or UNIXNU_KERNELCACHE')
+    p.add_argument('--skip-prelink', action='store_true', help='kernel/prelink: copy the built native kernel to kernel.macho without adding kernelcache kexts')
     p.add_argument('--skip-preflight', action='store_true', help='skip the board preflight scripts of the firmware step')
     p.add_argument('--kernel', metavar='FILE', help='prelinked kernel Mach-O for the payload (default: the kernel step output)')
     p.add_argument('--kernel-arg', action='append', metavar='NAME[=VALUE]', help='extra kernel boot argument (repeatable)')
     p.add_argument('--trust-cache', metavar='FILE', help='trust cache bundle for the payload')
     p.add_argument('--owner-trust-cache', metavar='FILE', help='owner-signed trust cache bundle that carries the original caches and extra modules; replaces --trust-cache and skips the board allow-list')
     p.add_argument('--skip-setup', action='store_true', help='mark Setup as done in the Data seed, so the Hello pages are skipped (needs --data-ramdisk; optional)')
-    p.add_argument('--data-ramdisk', metavar='FILE', help='Data ramdisk seed for the payload (an input; not built here)')
+    p.add_argument('--data-ramdisk', metavar='FILE', help='preserved Data ramdisk seed for this installation')
+    p.add_argument('--init-data', action='store_true', help='create and retain a new Data seed from the IPSW for a FIRST installation; requires kernel build')
     p.add_argument('--gpu-addon', metavar='FILE', help='GPU addon file (scripts/make-gpu-addon.py) the kernel writes into the Data volume at boot')
     p.add_argument('--unique-chip-id', metavar='HEX', help='platform seed for the device tree; or UNIXNU_UNIQUE_CHIP_ID')
     p.add_argument('--ipsw', metavar='PATH_OR_URL', help='the target IPSW: a local file or an https URL (default: url of board.toml [ipsw]); or UNIXNU_IPSW')
     p.add_argument('--dry-run', action='store_true', help='userdata: check sizes and pins, write nothing')
+    p.add_argument('--object', action='append', default=[], metavar='NAME=FILE[:OFFSET]',
+                   help='userdata: add a data object the kernel reads itself (policy table, firmware), '
+                        'the bytes of FILE from OFFSET on (repeatable)')
     p.add_argument('--target', choices=('DEBUG', 'RELEASE'), help='EDK II build target')
     return p
 
@@ -62,6 +71,13 @@ def parser():
     i.add_argument('--dtb', metavar='FILE', help='compiled device tree; or UNIXNU_DTB')
     i.add_argument('--ramdisk', metavar='FILE', help='ramdisk image, or none (default: the payload step output when present, else empty)')
     i.add_argument('-o', '--output', metavar='FILE', help='output (default: out/<device>/boot/boot.img)')
+    v = sub.add_parser('vendor_boot', parents=[c], help='replace the vendor ramdisk of a stock vendor_boot image')
+    v.add_argument('--stock', metavar='FILE', help='stock vendor_boot image to rebuild from')
+    v.add_argument('--ramdisk', metavar='FILE', help='vendor ramdisk to install, or none for an empty one')
+    v.add_argument('--ramdisk-addr', metavar='ADDR', help='ramdisk load address (default: the stock address)')
+    v.add_argument('--verify-against', action='store_true',
+                   help='repack the stock ramdisk first and require a byte-identical result')
+    v.add_argument('-o', '--output', metavar='FILE', help='output (default: vendor_boot.img next to --stock)')
     w = sub.add_parser('ipsw', parents=[c], help='show or extract the components of the target IPSW')
     w.add_argument('action', choices=('info', 'fetch'))
     w.add_argument('components', nargs='*', help='components to extract (default: the small ones the board lists)')
@@ -83,7 +99,7 @@ def need_uefi(ctx):
     return uefi
 
 
-REFERENCES = {'kernel': ('xnu', 'libplatform', 'libdispatch', 'AvailabilityVersions', 'libpthread', 'corecrypto-2023', 'IOStorageFamily'), 'package': ('edk2',), 'firmware': ('edk2',)}
+REFERENCES = {'kernel': ('xnu', 'libplatform', 'libdispatch', 'AvailabilityVersions', 'libpthread', 'corecrypto-2023', 'IOStorageFamily', 'IOHIDFamily'), 'package': ('edk2',), 'firmware': ('edk2',)}
 
 
 def prepare(ctx, steps=()):
@@ -155,19 +171,29 @@ def cmd_build(ctx):
             return
     if 'kernel' in steps:
         ctx.need_config()
+    if 'payload' in steps:
+        payload.begin_build(ctx)
     if 'firmware' in steps:
         need_uefi(ctx)   # fail before fetching anything
+        firmware.preflight_toolchain(ctx)
     modules = prepare(ctx, steps + (['kernel'] if 'prelink' in steps else []))
     if 'kernel' in steps:
-        kernel.build(ctx, modules)
-        kernel.prelink(ctx)
-    elif 'prelink' in steps:
-        kernel.prelink(ctx)
+        kernel.preflight(ctx)
+    if 'payload' in steps or 'runtime' in steps:
+        runtime.prepare(ctx, kernel_build='kernel' in steps)
+    elif 'kernel' in steps and ctx.args.data_ramdisk:
+        runtime.bind_seed(ctx, Path(ctx.args.data_ramdisk).expanduser().resolve(), kernel_build=True)
+    if 'kernel' in steps or 'prelink' in steps:
+        with toolchain.environment(ctx):
+            if 'kernel' in steps:
+                kernel.build(ctx, modules)
+            kernel.prelink(ctx)
     if 'package' in steps:
         package.build(ctx, modules, ctx.args.target)
     if 'payload' in steps:
         ctx.uefi = ctx.option('uefi', 'UNIXNU_UEFI')
         payload.build(ctx)
+        payload.finish_build(ctx)
     if 'firmware' in steps:
         firmware.build(ctx, modules, need_uefi(ctx), package.edk2_dir(ctx, modules), ctx.args.target)
 
@@ -177,15 +203,28 @@ def cmd_bootimg(ctx):
     uefi = need_uefi(ctx)
     fd = expand(ctx.args.fd) if ctx.args.fd else firmware.fd_path(ctx, uefi, ctx.args.target)
     dtb = ctx.option('dtb', 'UNIXNU_DTB')
+    if dtb is None:
+        configured_dtb = ctx.board.get('bootimg', {}).get('dtb')
+        dtb = ctx.tree / configured_dtb if configured_dtb else None
     ramdisk = None
     if ctx.args.ramdisk and ctx.args.ramdisk != 'none':
         ramdisk = expand(ctx.args.ramdisk)
     elif not ctx.args.ramdisk and payload.paths(ctx)[1].is_file():
         ramdisk = payload.paths(ctx)[1]
         log(f'ramdisk: {ramdisk} (use --ramdisk none for an empty one)')
+    if ctx.args.ramdisk != 'none' and (not ctx.args.ramdisk or ramdisk.resolve() == payload.paths(ctx)[1].resolve()):
+        payload.require_complete(ctx)
     if ramdisk is None:
         log('ramdisk: empty; build payload or pass --ramdisk FILE to include configured boot entries')
     bootimg.build(ctx, uefi, fd, dtb, ramdisk, expand(ctx.args.output) if ctx.args.output else None)
+
+
+def cmd_vendor_boot(ctx):
+    stock = expand(ctx.args.stock)
+    ramdisk = None if ctx.args.ramdisk in (None, 'none') else expand(ctx.args.ramdisk)
+    vendor_boot.build(stock, ramdisk, expand(ctx.args.output) if ctx.args.output else None,
+                      int(ctx.args.ramdisk_addr, 0) if ctx.args.ramdisk_addr else None,
+                      ctx.args.verify_against)
 
 
 def cmd_ipsw(ctx):
@@ -330,7 +369,8 @@ def main(argv=None):
     try:
         ctx = Context(args)
         {'defconfig': cmd_defconfig, 'fetch': cmd_fetch, 'tree': lambda c: prepare(c), 'build': cmd_build,
-         'bootimg': cmd_bootimg, 'ipsw': cmd_ipsw, 'status': cmd_status, 'clean': cmd_clean, 'release': cmd_release}[args.command](ctx)
+         'bootimg': cmd_bootimg, 'vendor_boot': cmd_vendor_boot, 'ipsw': cmd_ipsw, 'status': cmd_status,
+         'clean': cmd_clean, 'release': cmd_release}[args.command](ctx)
     except Error as error:
         sys.exit(f'unixnu: {error}')
     except KeyboardInterrupt:

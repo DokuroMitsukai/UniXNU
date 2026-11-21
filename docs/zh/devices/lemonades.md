@@ -27,5 +27,4 @@ git submodule update --init --recursive
 
 ## 来源
 
-- [README](https://github.com/soooink/UniXNU-lemonades/blob/5f52da00907a0cec41e73a81269549bc11991bff/README.md)
-- [构建指南](https://github.com/soooink/UniXNU-lemonades/blob/5f52da00907a0cec41e73a81269549bc11991bff/docs/BUILD.md)
+- [板级配置: soooink/UniXNU-lemonades](https://github.com/soooink/UniXNU-lemonades/blob/b4bf1f0c2141564fcb65a63e0de2d3fefee053f2/board.toml)

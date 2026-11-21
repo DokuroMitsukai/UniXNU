@@ -37,6 +37,7 @@ class RangeHandler(BaseHTTPRequestHandler):
         chunk = self.body[int(start):int(end) + 1]
         self.send_response(206)
         self.send_header('Content-Length', str(len(chunk)))
+        self.send_header('Content-Range', f'bytes {start}-{end}/{len(self.body)}')
         self.end_headers()
         self.wfile.write(chunk)
 
@@ -89,7 +90,39 @@ def main():
             expect(False, 'missing --local directory accepted')
         except Error:
             pass
+        # Explicit new modules remain available while their catalog entry is
+        # under development. Unselected catalog entries remain unselected.
+        (root / 'components.toml').write_text('[[component]]\nid = "Both"\nkind = "driver"\n')
+        parsed = cli.parser().parse_args(['status', '-D', str(root / 'dev'), '--out', str(root / 'out'),
+            '--local-module', f'driver:Draft={root / "one"}',
+            '--local-module', f'driver:Both={root / "one"}'])
+        ctx = Context(parsed)
+        ctx.schema_version = 2
+        ctx.root = root
+        ctx.board['components'] = {'include': []}
+        found = feeds.resolve(ctx)
+        expect(('driver', 'Draft') in found and found[('driver', 'Draft')].path == (root / 'one').resolve(),
+               'explicit new component survives format 2 selection')
+        expect(('driver', 'Both') not in found and ('driver', 'DevOnly') not in found,
+               'format 2 still filters unselected catalog and implicit modules')
     expect(payload.check_args(['-v', 'a=1', 'b=x,y']) == '-v a=1 b=x,y', 'kernel arguments')
+    with tempfile.TemporaryDirectory() as name:
+        root = Path(name)
+        (root / 'configs').mkdir()
+        (root / 'configs/boot_defconfig').write_text('CONFIG_XNU_OWNER_DATA_MOUNT=y\n')
+        ctx = argparse.Namespace(config={}, config_path=root / '.config', config_name='boot_defconfig', device=root)
+        for configured in (False, True):
+            if configured:
+                ctx.config_path.write_text('CONFIG_XNU_OWNER_DATA_MOUNT=y\n')
+                ctx.config = parse_config(ctx.config_path.read_text())
+            try:
+                payload.check_data_input(ctx, None)
+                expect(False, 'owner Data payload accepted without its seed')
+            except Error as error:
+                expect('--data-ramdisk' in str(error), 'missing seed diagnostic')
+            payload.check_data_input(ctx, root / 'seed.dbr')
+        ctx.config = {'XNU_OWNER_DATA_MOUNT': False}
+        payload.check_data_input(ctx, None)
     for bad in (['a b'], ['x' * 1100], ['a;b']):
         try:
             payload.check_args(bad)

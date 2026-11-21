@@ -79,6 +79,8 @@ The ADT must reserve the following properties when the matching input exists:
 | `/chosen/memory-map/PackedRAMDisk` | DarwinBoot writes the packed ramdisk address and size |
 | `/chosen/memory-map/TrustCache` | DarwinBoot writes the trust cache address and size |
 | `/chosen/darwinboot-memory-size` | Requests a contiguous window larger than 256 MiB |
+| `/chosen/darwinboot-memory-excluded` | DarwinBoot writes the ranges of the window the kernel must not use (gaps between DRAM banks, memory the firmware keeps) and puts the usable byte count in `memSizeActual` |
+| `/chosen/darwinboot-loader-inputs` | DarwinBoot writes two 32-byte records (payload RAM disk, initrd buffer): base, size, UEFI memory type, state, usable bytes |
 
 DarwinBoot requires the placeholder to exist for every input it receives. A mismatch is `EFI_COMPROMISED_DATA`.
 
@@ -108,6 +110,13 @@ The bundle is copied into the kernel window and its address and size replace the
 An `--owner-trust-cache` bundle is copied without the `[payload] trust_cache_sha256` check. It carries the original caches and extra modules such as the GPU plugin.
 
 ## Data ramdisk
+
+When the selected kernel configuration enables `CONFIG_XNU_OWNER_DATA_MOUNT`,
+the payload requires `--data-ramdisk FILE` or `[build] data_ramdisk` in the local
+build configuration. Without a generated `.config`, this check reads the
+selected device defconfig. A persistent overlay still needs its original seed
+to publish the Data volume; changing the seed is not a way to resume old Data.
+Missing seeds stop packaging before the payload is written.
 
 A Data seed can be delivered in two forms:
 

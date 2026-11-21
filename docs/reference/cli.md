@@ -65,6 +65,14 @@ unixnu bootimg [--fd FILE] [--dtb FILE] [--ramdisk FILE|none] [-o FILE]
 
 Packs the boot image. The firmware volume defaults to the output under `--uefi`. The ramdisk defaults to the payload output when it exists.
 
+### vendor_boot
+
+```
+unixnu vendor_boot --stock FILE [--ramdisk FILE|none] [--ramdisk-addr ADDR] [--verify-against] [-o FILE]
+```
+
+Rewrites the vendor ramdisk of a stock `vendor_boot` v4 image. The device tree, the ramdisk table, the bootconfig and the vbmeta blob are copied verbatim and the AVB footer is retargeted, so only the ramdisk and the sizes that depend on it change. `--ramdisk-addr` relocates the ramdisk when the stock window is too small for the payload. `--verify-against` repacks the stock ramdisk first and refuses a device whose layout does not reproduce its own image byte for byte. The output defaults to `vendor_boot.img` next to `--stock`.
+
 ### status
 
 ```
@@ -72,14 +80,6 @@ unixnu status [--json]
 ```
 
 Prints the device, output path, profile roots, component scope, source revisions, local overrides, and patch order. `--json` emits `schema_version`, `device`, `name`, `output`, `configuration`, `config_path`, `configured`, `profiles`, `configuration_sources`, `board`, `components`, `modules`, and `patch_order`. Status reads cached or local SoC sources; run `fetch` to obtain a missing source.
-
-### release
-
-```
-unixnu release [--os VERSION] [--no-deps] [--check]
-```
-
-Runs the fixed packaging steps of a device repository: deps, preflight, patches, build, pack and verify. The deps step fetches sources and the IPSW members; `--no-deps` skips it. `--check` resolves the selected profile, writes its configuration and lists the patch series, then stops before any build step. The pack step uses `[bootimg] dtb`, relative to the assembled tree, and the verify step writes `package.manifest.json` beside the outputs, checks the recorded hashes, the 1000-byte kernel command-line limit and the optional `[package] boot_partition_bytes` limit. Every device repository carries the same `scripts/package.sh`, which only reads `[package] unixnu` and runs this command.
 
 ### clean
 
@@ -89,12 +89,20 @@ unixnu clean
 
 Removes `tree`, `logs`, `kernel`, `package`, `boot` and `edk2-conf` under the board output. Keeps fetched sources.
 
+### release
+
+```
+unixnu release [--os VERSION] [--no-deps] [--check]
+```
+
+Runs the fixed steps `deps`, `preflight`, `patches`, `build`, `pack` and `verify` for the device, then writes `package.manifest.json`. The device repository's `scripts/package.sh` calls it. See [Device packaging script](/porting/packaging).
+
 ## Options
 
 | Option | Meaning |
 | --- | --- |
 | `-D DIR`, `--device DIR` | Device repository |
-| `--os VERSION` | OS profile: `17`, `26`, `27` or a `profiles/os` directory name |
+| `--os VERSION` | OS profile for this run: `17`, `26`, `27`, `macos-27` or a `profiles/os` directory name. The output directory follows it |
 | `--out DIR` | Output root |
 | `-j N`, `--jobs N` | Parallel jobs |
 | `--local DIR` | Local tree with this repository's layout |
@@ -122,6 +130,9 @@ Removes `tree`, `logs`, `kernel`, `package`, `boot` and `edk2-conf` under the bo
 | `--dtb FILE` | Compiled device tree for bootimg |
 | `--ramdisk FILE\|none` | Ramdisk for bootimg |
 | `-o FILE`, `--output FILE` | Boot image output |
+| `--stock FILE` | Stock vendor_boot image for vendor_boot |
+| `--ramdisk-addr ADDR` | Ramdisk load address for vendor_boot |
+| `--verify-against` | Repack the stock ramdisk and require a byte-identical result |
 
 ## Environment
 

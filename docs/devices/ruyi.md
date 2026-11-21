@@ -12,6 +12,4 @@ The main device repository contains ruyi board configuration and a kernel defcon
 
 ## Sources
 
-- [Board configuration](https://github.com/ArnoDorian123/UniXNU-ruyi/blob/9fdf6d9dac150184b8a0fe1276c86d87d1ff1c5a/board.toml)
-
-Follow [Port a device](/porting/steps) to complete board inputs and driver integration, then record results in the [bring-up order](/porting/bring-up).
+- [Board configuration: ArnoDorian123/UniXNU-ruyi](https://github.com/ArnoDorian123/UniXNU-ruyi/blob/5394473ed77d634269e9023d4f97a9429242ef5a/board.toml)

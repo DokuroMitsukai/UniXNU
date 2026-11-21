@@ -8,11 +8,13 @@
 
 ## 当前状态
 
-记录确认 UEFI、菜单、GOP、物理按键和 UFS 大容量存储访问可用，XNU 已通过 UEFI 启动。根卷集成和 GPU 支持待完成。
+UEFI 已启动菜单和 DarwinBoot，XNU 到达 BSD 根设备等待。内核加载了 AMFI、AppleImage4、pthread 和 MAC 框架，初始化网络核心并注册 APFS。
+
+当前适配任务为 UFS 根卷挂载。源码包含 USB 控制台工作，完整用户态和 GPU 支持仍需后续设备结果。
 
 ## 来源
 
-- [README: YinCQL/UniXNU-picasso](https://github.com/YinCQL/UniXNU-picasso/blob/879f753a01790950350bc105cb854074ffb2005b/README.md)
+- [README: YinCQL/UniXNU-picasso](https://github.com/YinCQL/UniXNU-picasso/blob/11d7ea8e78976e84663ea4b19e656a5564e6c40e/README.md)
 
 ## 使用此移植
 

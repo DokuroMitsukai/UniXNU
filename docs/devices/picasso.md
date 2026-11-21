@@ -8,11 +8,13 @@ A community-maintained port for SM7250. Current results are based on the maintai
 
 ## State
 
-UEFI, the menu, GOP, physical keys and UFS mass-storage access are recorded as working. XNU starts through UEFI. Root-volume integration and GPU support remain pending.
+UEFI starts the menu and DarwinBoot, and XNU reaches the BSD root-device wait. The kernel loads AMFI, AppleImage4, pthread and the MAC framework, initializes the network core and registers APFS.
+
+UFS root mounting remains the current bring-up task. The source includes USB console work; full userland and GPU support require further device results.
 
 ## Sources
 
-- [README: YinCQL/UniXNU-picasso](https://github.com/YinCQL/UniXNU-picasso/blob/879f753a01790950350bc105cb854074ffb2005b/README.md)
+- [README: YinCQL/UniXNU-picasso](https://github.com/YinCQL/UniXNU-picasso/blob/11d7ea8e78976e84663ea4b19e656a5564e6c40e/README.md)
 
 ## Use this port
 

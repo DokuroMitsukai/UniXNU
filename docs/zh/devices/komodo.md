@@ -12,7 +12,7 @@
 
 ## 来源
 
-- [README: Trijal08/UniXNU-komodo](https://github.com/Trijal08/UniXNU-komodo/blob/8b6c40fa465ae1c1617685a7a62dfae85e467359/README.md)
+- [板级配置: Trijal08/UniXNU-komodo](https://github.com/Trijal08/UniXNU-komodo/blob/5a4cfddef602f11c1e5a1836a089e83f1794504c/board.toml)
 
 ## 使用此移植
 

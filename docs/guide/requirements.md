@@ -19,6 +19,7 @@ The build driver supports macOS and Linux. On macOS, the kernel step uses Xcode 
 | cmake, ninja | kernel references | `brew install cmake ninja` |
 | unifdef | libdispatch headers | `brew install unifdef` |
 | LLVM with lld | kernel, firmware, boot image | `brew install llvm` |
+| Rust 1.98.0 with rust-src | Metal bridge | `rustup toolchain install 1.98.0 --profile minimal --component rust-src` |
 | mtools | payload volume | `brew install mtools` |
 | dtc | device tree properties | `brew install dtc` |
 | fastboot | seed-data-grow `--auto`, userdata flash | Android platform tools |
@@ -92,12 +93,18 @@ These inputs live outside the UniXNU repositories.
 
 ### Target IPSW
 
-The sheng board keeps iPadOS 17.7.11 as its default target. The iPhone X iOS 16.7.16 image is a second target and does not replace it.
+An OS profile targets an iOS, iPadOS or macOS restore image. The image family must match the device identity ([MobileGestalt](/guide/mobilegestalt#ipados-and-ios)). The arm64 targets are iOS 16 and iPadOS 17; the arm64e targets are iOS 27, iPadOS 27 and macOS 27.
 
-| Target | Version | Build | Restore image |
-| --- | --- | --- | --- |
-| iPadOS, sheng default | 17.7.11 | 21H461 | [iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw](https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw) |
-| iOS, iPhone X | 16.7.16 | 20H392 | [iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw](https://updates.cdn-apple.com/2025FallFCS/fullrestores/122-77006/1158E502-D76D-4226-AA06-ED5E30CD1111/iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw) |
+| Architecture | Target | Version | Build | Restore image |
+| --- | --- | --- | --- | --- |
+| arm64 | iOS, iPhone X (iPhone10,3, iPhone10,6) | 16.7.16 | 20H392 | [iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw](https://updates.cdn-apple.com/2025FallFCS/fullrestores/122-77006/1158E502-D76D-4226-AA06-ED5E30CD1111/iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw) |
+| arm64 | iPadOS, iPad Pro 12.9-inch 2nd generation (iPad7,1) | 17.7.11 | 21H461 | [iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw](https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw) |
+| arm64e | iOS, iPhone 16 Pro (iPhone17,1) | 27.0.1 | 24A446 | [iPhone17,1_27.0.1_24A446_Restore.ipsw](https://updates.cdn-apple.com/2026FallFCS/59ffd938-75b6-41e5-af04-f4295ee8aeb3/iPhone17,1_27.0.1_24A446_Restore.ipsw) |
+| arm64e | iPadOS, iPad Pro M5 (iPad17,1 to iPad17,4) | 27.0.1 | 24A446 | [iPad17,1,iPad17,2,iPad17,3,iPad17,4_27.0.1_24A446_Restore.ipsw](https://updates.cdn-apple.com/2026FallFCS/6074e110-d48d-40c2-b0e8-b611520941a3/iPad17,1,iPad17,2,iPad17,3,iPad17,4_27.0.1_24A446_Restore.ipsw) |
+
+iOS 16 and iPadOS 17 are both arm64 images and share the arm64 patch series (`profiles/arch/arm64`); a fix to one applies to the other. The links come from [ipsw.me](https://ipsw.me) and point to Apple's servers.
+
+The macOS profile targets `UniversalMac_27.3_26C5035r_Restore.ipsw` (Mac17,11). Its URL is `[ipsw] url` of the profile, and its further inputs are in [macOS profile](/porting/macos#inputs).
 
 `[ipsw] url` in the device repository is the default. `--ipsw` or `UNIXNU_IPSW` overrides it. Download the image outside the repository.
 
@@ -119,4 +126,4 @@ The device needs:
 - [Device repository](/porting/device-repository) describes the board file.
 - [Devices](/devices/) lists device repositories and their specific inputs.
 
-For the sheng target, review the [ABI, SDK, firmware, and image input inventory](/porting/migration#build-inputs) before starting the full build.
+Review the [ABI, SDK, firmware, and image input inventory](/porting/migration#build-inputs) before starting the full build.

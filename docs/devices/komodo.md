@@ -12,7 +12,7 @@ Hardware tests reach the firmware menu, test payload and entry probes using a pr
 
 ## Sources
 
-- [README: Trijal08/UniXNU-komodo](https://github.com/Trijal08/UniXNU-komodo/blob/8b6c40fa465ae1c1617685a7a62dfae85e467359/README.md)
+- [Board configuration: Trijal08/UniXNU-komodo](https://github.com/Trijal08/UniXNU-komodo/blob/5a4cfddef602f11c1e5a1836a089e83f1794504c/board.toml)
 
 ## Use this port
 

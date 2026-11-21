@@ -156,7 +156,7 @@ Keep the source filenames, runtime classes, bundle IDs, plugin filenames,
 exported symbols, and protocol IDs recorded in `runtime_identifiers`.
 
 Adreno740 provides the A740 kernel GPU interface. AdrenoMetal provides the Metal
-frontend. Their metadata records A740/SM8550 scope and sheng verification.
+frontend. Their metadata records A740/SM8550 scope and per-device verification.
 The board supplies firmware, power policy, memory adjustments, and display
 integration.
 
@@ -218,7 +218,7 @@ Complete these edits before running the resolver:
 4. Compare the inherited archive plan with the port's required archive builders.
    When setting `kernel.archives`, include the full ordered plan. Use
    `component:<ID>` for catalog recipes and bare script names for auxiliary builders.
-   The [sheng board file](https://github.com/UniXNU/UniXNU-sheng/blob/main/board.toml)
+   The [reference board file](https://github.com/UniXNU/UniXNU-sheng/blob/main/board.toml)
    shows an explicit plan containing both.
 5. Keep the board's firmware paths, partition layout, boot image settings and
    payload policy. Put OS properties in the selected OS profile and board-specific
@@ -235,7 +235,7 @@ ordered kernel inputs and its existing board-specific settings.
 ## 5. Convert the hardware description to DTS
 
 Read the [device-tree specification](/porting/device-tree) and
-[driver matching rules](/drivers/device-tree-matching). Inspect the port's ADT
+[driver matching rules](/porting/driver-development#matching). Inspect the port's ADT
 script and the properties read by its drivers. Convert them in this order:
 
 | Input | Action |
@@ -327,9 +327,9 @@ For `panic_screen = true`, the firmware checkout supplies
 `FrameBufferSerialPortLib/Font.h`; the main UniXNU checkout supplies the entry
 probe and renderer. See [panic screen inputs](/guide/debugging#panic-screen).
 
-### sheng build inputs {#build-inputs}
+### Build inputs {#build-inputs}
 
-The sheng archive and image steps require:
+Prepare the inputs used by the selected archive and image recipes:
 
 - A full Xcode installation with the iPhoneOS SDK.
 - `storage-abi/interface-audit.json` and its matching storage ABI inputs.
@@ -339,8 +339,8 @@ The sheng archive and image steps require:
 - `.cache/mesa-work`, built Turnip, and metal2vulkan inputs for the Metal plugin.
 - The selected IPSW members, platform seed, trust-cache bundle, Data seed, and firmware DTB.
 
-For another device, follow its selected recipes and the subsystem guides linked
-from [driver adaptation](/porting/drivers) to prepare matching inputs.
+Use the selected recipes and the subsystem guides linked from
+[driver adaptation](/porting/drivers) to identify the required inputs.
 
 **Result:** firmware integration and local input paths are complete. Record
 missing inputs with the build step that needs them.
@@ -451,16 +451,67 @@ Its shared source is
 its OS profile is `profiles/os/ipados-17.7.11-21H461/`, and its firmware is
 [uefi-sheng](https://github.com/UniXNU/uefi-sheng).
 
-For existing sheng checkouts, set `DEVICE=sheng`,
-`DEVICE_DIR=../UniXNU-sheng` and `DEFCONFIG=sheng_defconfig`, then follow
-steps 6 through 9 with the [sheng inputs](#build-inputs). The output directory
-is `out/sheng/ipados-17.7.11-21H461/sheng/`. Its component selection includes
-Adreno740 and AdrenoMetal together with the board's storage, input, display
-and image components. The [device page](/devices/sheng) records its scope and
-verification results.
+Set `DEVICE`, `DEVICE_DIR` and `DEFCONFIG` from the selected device repository,
+then follow steps 6 through 9 with the [build inputs](#build-inputs).
+Outputs use `out/<device>/<os_profile>/<config>/`. The selected profile supplies
+the GPU, storage, input, display and image components. Record results in the
+device's `porting.toml`.
 
 ## Next steps
 
 - [Driver adaptation](/porting/drivers): complete each subsystem's board inputs and integration.
 - [Bring-up order](/porting/bring-up): record checkpoints using the built images.
 - [Debugging](/guide/debugging): investigate failed builds and boot stages.
+
+## Public-source storage and input builds {#source-drivers}
+
+For the `ipados-27.0.1-24A446` profile, `build-sheng-source-drivers.py` compiles
+ShengUfs, ShengHidInput and the board input transport using the prepared XNU
+12377 C/C++ recipes. The profile pins IOStorageFamily 337.100.1 and IOHIDFamily
+2238.120.5 from Apple's [macOS 26.5 source manifest](https://github.com/apple-oss-distributions/distribution-macOS/blob/83390100289cedfe669c31a96c94326d31afa1ed/release.json).
+Apple's [iOS 26.5 manifest](https://github.com/apple-oss-distributions/distribution-iOS/blob/f92ef8bfffdb54c4aa4709717e3609f1647f59ed/release.json)
+does not publish these families. The public macOS pins are source inputs, not
+proof of compatibility with the stripped iOS or iPadOS binaries.
+
+From UniXNU, with a prepared kernel tree, clean source checkouts at the profile
+pins and extracted Novatek firmware in the device cache, run the reference builder:
+
+```sh
+python3 scripts/build-sheng-source-drivers.py \
+  --tree /path/to/resolved/tree \
+  --device /path/to/device \
+  --storage-source out/driver-sources/IOStorageFamily \
+  --hid-source out/driver-sources/IOHIDFamily \
+  --with-storage-family
+```
+
+Obtain the source checkouts from the `git`, `ref` and `commit` entries in the
+OS profile. `--touch-firmware` can select another extracted firmware file.
+The builder rejects an incorrect source revision, a modified source checkout,
+a mismatched kernel object target or empty firmware. Each object is checked for
+arm64e and the iOS deployment version; commands, dependency hashes, compiler
+warnings, firmware identity and remaining imports are recorded under
+`build/sheng-source-drivers` in the target tree.
+
+`--with-storage-family` builds the 14 public kernel C++ sources plus the IIG
+implementation generated with Apple's DriverKit SDK. Apple source warnings are
+recorded and do not become errors. The input transport archive includes board
+touch/buttons, GENI SPI, Novatek protocol/contact processing and firmware,
+without requiring the legacy display builder. HID uses `IOHIDDevice.h` and
+`kIOHIDReportTypeInput`; this source mode does not install the Darwin 23 virtual
+table edge-event patch. The original HID builder rejects arm64e targets.
+
+These are relocatable archives, not a boot image. The report keeps
+`link_qualified`, `runtime_qualified` and `edge_gestures_qualified` false.
+HID diagnostics/startup, verified-root policy/crypto linkage, metaclass
+registration, target-family dependencies and retained APFS consumers still
+need integration. Do not register source and original copies of the same
+IOKit class together. The public HID checkout lacks `IOHIDEventTypes.h` and
+`IOHIDEventStructDefs.h`; its device implementation also requires private
+reporting/analytics headers. A successful input-device compile does not mean
+the full IOHIDFamily can be built from this release alone.
+
+Storage header preparation now validates the selected source commit on each
+archive build and replaces its generated header tree, preventing an earlier
+OS profile's headers from surviving a source switch. Existing iOS 17 ABI and
+device evidence must remain labeled with that OS version.

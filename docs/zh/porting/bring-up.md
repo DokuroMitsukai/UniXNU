@@ -4,7 +4,7 @@ bring-up 按阶段推进。每个阶段都有可见结果和日志行，一次�
 
 重复构建时，在 [unixnu.local.toml](/zh/reference/configuration#local-build-inputs) 保存路径。修改启动参数后，按[参数应用流程](/zh/xnu/boot-arguments#apply-arguments)重新构建负载和启动镜像。画面停在加载器交接阶段时，按[绿条诊断](/zh/guide/debugging#green-bar)检查。
 
-启用外设前完成对应[适配流程](/zh/porting/drivers)，按[构建指南](/zh/building)生成镜像，再依次检查以下阶段。失败后先保存镜像和最后日志，再修改输入。
+启用外设前完成对应[适配流程](/zh/porting/drivers)，按[构建指南](/zh/building)生成镜像，再依次检查以下阶段。失败后先保存镜像和最后日志，再修改输入。macOS 镜像经过相同阶段，另有 [macOS 检查点](/zh/porting/macos#bring-up)。
 
 ## 阶段 1：UEFI
 
@@ -99,8 +99,7 @@ fastboot boot out/<device>/<os_profile>/<config>/boot/boot.img
 
 根卷匹配失败时内核没有根设备。检查 UUID、窗口偏移和分区容量。
 
-存储可用后，按[持久化日志步骤](/zh/porting/log-capture#persistent-logs)接入写入器和 Linux 读取器，
-先手动取回一次日志，再启用定时重启和自动循环。
+存储可用后，按[持久化日志步骤](/zh/porting/log-capture#persistent-logs)接入写入器和 Linux 或 recovery 读取器，先手动取回一次日志，再启用定时重启和自动循环。
 
 ## 阶段 7：用户态
 

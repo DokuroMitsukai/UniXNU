@@ -28,7 +28,7 @@ DarwinBoot 从启动项目录读取它。
 
 ```toml
 [device_tree]
-source = "device:dts/sheng.dts"
+source = "device:dts/myboard.dts"
 include_dirs = ["soc:dts"]
 ```
 
@@ -42,8 +42,8 @@ payload 步骤运行 `dtc`，在解析后的输出目录写入 `device-tree/hard
 /include/ "sm8550.dtsi"
 
 / {
-    model = "Xiaomi Pad 6S Pro";
-    compatible = "xiaomi,sheng", "qcom,sm8550";
+    model = "Example SM8550 device";
+    compatible = "vendor,myboard", "qcom,sm8550";
 };
 ```
 
@@ -55,7 +55,7 @@ payload 步骤运行 `dtc`，在解析后的输出目录写入 `device-tree/hard
 | 属性 | 输入 | ADT 表示 |
 | --- | --- | --- |
 | `compatible`, `device_type`, `reg-names`, `interrupt-names`, `clock-names`, `method` | NUL 结尾的字符串 | 字符串字节 |
-| `phandle`, `linux,phandle`, `#interrupt-cells`, `#iommu-cells`, `clock-frequency`, `timebase-frequency` | 一个大端 cell | 小端 u32 |
+| `phandle`, `linux,phandle`, `#interrupt-cells`, `#iommu-cells`, `clock-frequency`, `timebase-frequency`, `transport-encoding`, `transport-speed` | 一个大端 cell | 小端 u32 |
 | `redistributor-stride` | 一或两个 cell | 小端 u64 |
 | `interrupt-controller`, `dma-coherent` | 空属性 | 空属性 |
 | `reg` | 按父节点 cell 宽度编码的地址和长度 | 转换后的物理 u64 地址与长度对 |
@@ -63,6 +63,7 @@ payload 步骤运行 `dtc`，在解析后的输出目录写入 `device-tree/hard
 | `interrupt-parent` | 控制器 phandle | 小端 phandle |
 | `iommus`, `clocks` | phandle 和提供者定义的参数 cell | 小端 cell |
 | `unixnu,adt-name` | 导出的硬件节点名 | `/arm-io` 下的子节点名 |
+| `unixnu,cluster-type` | CPU 节点上的 `"E"` 或 `"P"` | `cluster-type`，该字符的小端 u32 |
 | `status` | `okay`、`ok` 或禁用状态 | 选择启用节点 |
 
 参与地址转换的总线声明 `ranges`，空 `ranges` 表示恒等映射。每个寄存器范围必须恰好
@@ -95,9 +96,16 @@ sleep-disabled = 1
 
 ## 独立转换
 
+设置设备与 SoC 源码路径，将本机平台种子导出为 `UNIXNU_UNIQUE_CHIP_ID`，并选择 OS 配置：
+
 ```sh
-dtc -I dts -O dtb -i ../UniXNU-sm8550-common/dts   -o /tmp/sheng.dtb ../UniXNU-sheng/dts/sheng.dts
-python3 scripts/make-adt.py --dtb /tmp/sheng.dtb   --os-profile profiles/os/ipados-17.7.11-21H461/profile.toml   --board ../UniXNU-sheng/board.toml --unique-chip-id <hex>   --data-ramdisk --trust-cache --output /tmp/kernel.macho.adt
+DEVICE_DIR=/path/to/device
+SOC_DTS=/path/to/soc/dts
+dtc -I dts -O dtb -i "$SOC_DTS" -o /tmp/board.dtb "$DEVICE_DIR/dts/myboard.dts"
+python3 scripts/make-adt.py --dtb /tmp/board.dtb \
+  --os-profile profiles/os/ipados-17.7.11-21H461/profile.toml \
+  --board "$DEVICE_DIR/board.toml" --unique-chip-id "$UNIXNU_UNIQUE_CHIP_ID" \
+  --data-ramdisk --trust-cache --output /tmp/kernel.macho.adt
 ```
 
 命令根据提供的 payload 输入选择内存映射占位属性。`unixnu build payload` 使用完整
@@ -290,5 +298,5 @@ QEMU 生成器是最小完整示例。真实板级的数值记录在[设备](/zh
 ## 下一步
 
 - [启动负载](/zh/concepts/payload)
-- [设备树匹配](/zh/drivers/device-tree-matching)
+- [provider 匹配](/zh/porting/driver-development#matching)
 - [bring-up 顺序](/zh/porting/bring-up)

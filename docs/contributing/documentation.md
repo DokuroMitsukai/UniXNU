@@ -51,6 +51,8 @@ docs/
 
 ## Add a page
 
+Format 2 device pages follow [record publication](/porting/records#publishing-and-reuse). Use these steps for authored guides.
+
 1. Create the Markdown file under the matching section.
 2. Add the page to the sidebar in `docs/.vitepress/config.mts`.
 3. Add the Chinese page under `docs/zh/` and to the Chinese sidebar.
@@ -99,11 +101,12 @@ VitePress fails the build on a broken internal link.
 
 ## Device records
 
-Site builds require Python 3.11 or newer. `npm run build` fetches the device
-revisions in `devices.toml`, validates their records and renders device pages.
-Edit `porting.toml` in the device repository and update its registry revision
-after publication. Both language editions include the same record. See the
-[record guide](/porting/records).
+Site builds require Python 3.11 or newer. `npm run build` renders the committed
+catalog and record snapshots. The twice-daily catalog workflow discovers sources,
+pins revisions and refreshes format 2 pages, the index and navigation.
+Edit `porting.toml` in the device repository and publish it. Both language
+editions use the same record. Existing legacy pages retain their authored text;
+new legacy entries contain a repository link. See the [record guide](/porting/records#publishing-and-reuse).
 
 ## Driver guides
 
@@ -113,3 +116,6 @@ the relevant symbols, call order, data ownership and error handling. Use board
 sources as references and keep device status in device records. Each step states
 what to change and how to observe its result. Use matching source references in
 the English and Chinese editions.
+
+A porting page links other porting pages for adaptation steps. Component pages
+under `drivers/` are reference and are reached from [Technical reference](/reference/).

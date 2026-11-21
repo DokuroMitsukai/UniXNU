@@ -68,7 +68,7 @@ python -m unittest discover -s tests/terminal -v
 | 来源 | 通道 | 用途 |
 | --- | --- | --- |
 | [固件日志导出](/zh/porting/log-capture#qr-logs) | OneSend 二维码 | 当前 UEFI Advanced Logger 缓冲 |
-| [持久化日志](/zh/porting/log-capture#persistent-logs) | 预留存储区域和 Linux 读取器 | 内核消息与诊断快照 |
+| [持久化日志](/zh/porting/log-capture#persistent-logs) | 预留存储区域、Linux 读取器或 recovery 读取器 | 内核消息与诊断快照 |
 | UEFI 串口 | UART | 固件、UniXNU、DarwinBoot |
 | 内核串口 | 由 `serial=` 选择的 UART | XNU 控制台和 panic 输出 |
 | 诊断页 | framebuffer | 控制台停止后的实时状态 |
@@ -146,7 +146,7 @@ boot-progress=2
 给镜像加标签，拍照后可以确认构建：
 
 ```
-sheng-build-tag=ks-001
+build-tag=ks-001
 ```
 
 标题栏会以 `[ks-001]` 开头。
@@ -219,12 +219,18 @@ panic 屏幕把格式化后的 panic 消息和寄存器写到 framebuffer，并�
 
 ### 交接时的绿色条 {#green-bar}
 
-顶部绿色条由 DarwinBoot 的 `DarwinEnter` 在 `ExitBootServices` 之后绘制，随后才执行缓存维护、关闭 MMU 和跳转 XNU。画面停在这里时，需要入口探针或串口日志定位后续阶段。仅凭绿色条，原因未查明。
+顶部绿色条由 DarwinBoot 的 `DarwinEnter` 在 `ExitBootServices` 之后绘制，随后才执行缓存维护、关闭 MMU 和跳转 XNU。持久化内核日志记录后续检查点，包括 `Darwin Kernel Version` 和 `SourceStorage: Data disk started`。framebuffer 保留加载器画面时，按最新内核检查点定位。
+
+内核入口故障按以下步骤检查：
 
 1. 记录最后的 `DARWINBOOT:` 日志，包括内核入口地址、显示几何信息、命令行和 CPU 状态。确认所选内核和 ADT 对应同一设备及 OS 配置。
 2. 对 `scripts/patch-xnu-entry-probe.py` 支持的内核，在设备配置中设置 `[payload] panic_screen = true`，运行 `./unixnu payload` 和 `./unixnu bootimg`，再启动新镜像。检查 `logs/payload-patch.log` 中的探针安装结果。
 3. 查看绿色条下方的蓝色和品红色条。蓝色表示进入 MMU 关闭状态下的内核入口，品红色表示到达开启 MMU 前的位置。缺少探针画面时，检查记录的 framebuffer 基址和行跨度。
 4. 使用 `entry_probe_reset_delay = 6` 设置开启 MMU 后的定时复位检查点。在设备移植记录中保存色条、复位时间、串口输出和 `payload.json`。
+
+sheng 使用 `storage-probe=1 log=1` 记录 BSD 初始化、后续 bootstrap 调用和 PID 1 执行阶段。UFS 日志区的空闲块分别保留 bootstrap 和 PID 1 的环形记录，包含序号、PID、线程、构建标签、阶段、计数器、虚拟定时器状态、DAIF、待处理中断和调用地址。`read-sheng-log.py --expected-tag TAG` 将匹配记录导出为 `startup-checkpoints.txt`，并将最新记录保存为 `startup-checkpoint.txt`。自动循环传入预期标签，并记录日志文件头和检查点是否属于本次启动。保持已验证的固件 watchdog 和自动返回 fastboot 功能启用。
+
+持久化启动日志覆盖关闭屏幕进度层时的 PID 1 阶段、挂载与启动策略返回码，并在进入调试器前保存第一条格式化 panic 消息。读取器通过状态为 `5` 的日志文件头导出 panic 消息缓冲区。
 
 配置修改未体现在启动镜像中时，按[应用启动参数](/zh/xnu/boot-arguments#apply-arguments)检查。
 
@@ -306,7 +312,7 @@ trace 每 8 秒轮换一页。间隔几秒拍三到四张照片，覆盖全部�
 
 诊断页按拍照场景设计。建议流程：
 
-1. 把 `sheng-build-tag` 设为简短的镜像标签。
+1. 把 `build-tag` 设为简短的镜像标签。
 2. 冻结页面用 `boot-progress=1`，实时页面用 `boot-progress=2`。
 3. 用户态会清屏时设置 `boot-diag-resume`。
 4. 把设备放在支架上，相机与面板平行。
@@ -354,10 +360,10 @@ python3 scripts/qemu-entry/gdb-stop.py --help
 | `kextlog=0xfff` | kext 日志 |
 | `boot-progress=1` | 诊断页，30 秒停滞后冻结 |
 | `boot-progress=2` | 诊断页连续运行 |
-| `sheng-build-tag=<tag>` | 标题栏镜像标签 |
+| `build-tag=<tag>` | 标题栏镜像标签 |
 | `boot-diag-resume=<seconds>` | OS 停止 scanout 后收回面板 |
-| `sheng-platform-stage=<n>` | 在平台专家阶段停住 |
-| `sheng-touch=<n>` | 触控探针阶段 |
+| `platform-stage=<n>` | 在平台专家阶段停住 |
+| `touch=<n>` | 触控探针阶段 |
 | `offline-legacy-phase=<n>` | 显示探针阶段 |
 | `-no_slto_panic` | 关闭 SLTO panic |
 | `cs_debug=<mask>` | 代码签名输出 |
@@ -387,4 +393,33 @@ jq . out/<device>/<os_profile>/<config>/boot/boot.json
 - [启动参数](/zh/xnu/boot-arguments)
 - [故障排查](/zh/reference/troubleshooting)
 - [QEMU 测试](/zh/reference/qemu)
-- [sheng 设备页](/zh/devices/sheng)
+- [参考设备记录](/zh/devices/sheng)
+
+panic 显示器在本轮内核清零的 BSS 中记录首次 panic。热重启可以保留显存内容，旧画面不影响新一轮显示和导出 panic。2,048 字节 panic 文本缓冲区的最后一个字节用于记录该状态。
+
+## 检查工具
+
+`local-tools/` 提供构建产物和桌面采样的检查命令。
+
+| 工具 | 输入与结果 |
+| --- | --- |
+| `adt-chosen.py` | 从 payload ADT 打印 DarwinBoot 属性和范围。 |
+| `kernel-compile-check.py` | 使用所选构建树的 XNU 编译记录编译单个源文件，`--tree` 指定构建树。 |
+| `record-build-provenance.py` | 记录源码、工具链、参数和输出，`--core`、`--device`、`--uefi` 指定检出目录。 |
+| `recover-root-policies.py` | 将 payload 中的签名头和公开 owner key 与 `--verification-from` 匹配，`--write` 写入指定目录。 |
+| `tablet-ci-blur-probe.js` | 执行 Core Image 模糊并报告结果。 |
+| `tablet-icon-stress.js` | 按多种尺寸渲染应用图标并统计失败数量。 |
+| `tablet-pointer-probe.js` | 保存窗口系统的指针坐标和时间，静止采样也保留初始坐标。 |
+| `pointer-csv-stats.py` | 统计移动间隔、位移和停顿后的变化。 |
+| `touchpad-timing.py` | 从标准输入解码 `ShengTouchpadTiming`，`--since HEX` 与之前的记录比较。 |
+| `ocr-frames.swift` | 识别帧中文字，`--boxes` 输出坐标，`--fast` 选择 Vision 快速识别模式。 |
+
+JXA 工具通过 `osascript -l JavaScript` 运行。指针采样记录窗口系统坐标，键盘盖报告时序从设备注册表读取。
+
+```sh
+python3 local-tools/kernel-compile-check.py SOURCE --tree /path/to/resolved-tree
+osascript -l JavaScript local-tools/tablet-pointer-probe.js 30 40 pointer.csv 300
+python3 local-tools/pointer-csv-stats.py pointer.csv --pause 60 --big 150
+ssh TABLET 'ioreg -r -c ShengKeyboardCover -l -d 1' | python3 local-tools/touchpad-timing.py
+swift local-tools/ocr-frames.swift --fast --boxes FRAME.jpg
+```

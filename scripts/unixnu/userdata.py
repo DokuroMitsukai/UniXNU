@@ -8,14 +8,17 @@ It holds the unchanged OS and SystemOS disk images of the IPSW, byte for byte, b
     ....      window "SystemOS"  the whole attached SystemOS disk image, 1 MiB aligned
     ....      object "OS.vroot"  an optional version-2 data object, 4096 aligned
 
-Manifest (little endian): "SHNGROOT", u32 version, u32 count, u64 image_bytes, then `count` 128-byte
-entries {char name[32], u64 offset, u64 size, u32 block_size, u32 flags, u8 sha256[32], 40 reserved},
-and at byte 4064 the SHA-256 of bytes 0..4063. Version 1 holds only block windows (block size 512,
-flags 1). Version 2 adds data objects the kernel reads itself (block size 4096, flags 3); objects are
-listed in board.toml `[userdata] objects = [{ name, path }]` and are never published as block devices.
+    ....      data objects (--object NAME=FILE[:OFFSET], or board.toml [userdata] objects), 4096 aligned
 
-The images come from the IPSW (a local file or a remote URL, see ipsw.py) and are checked against the pins of
-board.toml. The raw disk of each disk image is read without mounting: attached read-only with hdiutil on macOS,
+Manifest (little endian): "SHNGROOT", u32 version, u32 count, u64 image_bytes, then `count` 128-byte entries
+{char name[32], u64 offset, u64 size, u32 block_size, u32 flags, u8 sha256[32], 40 reserved},
+and at byte 4064 the SHA-256 of bytes 0..4063. A window has block_size 512 and flags 1 (read-only block device).
+Version 2 adds data objects with block_size 4096 and flags 3: the kernel reads them itself and never publishes
+them as block devices (the hash tables of header-only root policies, firmware). Version 1 holds windows only.
+
+The OS profile lists the windows ([userdata] windows; optional ones are skipped when the IPSW lacks them) and the
+device sets the partition geometry. The images come from the IPSW (a local file or a remote URL, see ipsw.py),
+are decrypted when the IPSW ships them as AEA, and are checked against the pins of board.toml. The raw disk of each disk image is read without mounting: attached read-only with hdiutil on macOS,
 decoded by udif.py on other hosts. Nothing is flashed: the report prints the fastboot command, to be run by the user.
 """
 import contextlib
@@ -26,6 +29,7 @@ import plistlib
 import re
 import struct
 import subprocess
+from pathlib import Path
 
 from . import udif
 from .ipsw import Ipsw
@@ -100,6 +104,18 @@ def build(ctx, dry_run=False):
         tool('hdiutil', 'the disk images are attached with macOS hdiutil')
     source = Ipsw(ctx)
     capacity = (spec['last_lba'] - spec['first_lba'] + 1) * spec.get('lba_bytes', 4096)
+    windows = []
+    for window in spec.get('windows', []):
+        try:
+            source.member(window['component'])
+        except Error:
+            if not window.get('optional'):
+                raise
+            log(f'userdata: {window["name"]} skipped, {window["component"]} is not in this IPSW')
+            continue
+        windows.append(window)
+    if not windows:
+        raise Error('[userdata] windows selects no disk image; the OS profile defines them')
     objects = []
     for item in spec.get('objects', []):
         path = ctx.device / item['path']
@@ -108,27 +124,38 @@ def build(ctx, dry_run=False):
         size = path.stat().st_size
         if size <= 0:
             raise Error(f'userdata object is empty: {path}')
-        objects.append((item['name'], path, size))
-    if len(spec['windows']) > 4 or len(objects) > 4:
+        objects.append((item['name'], path, size, 0))
+    for spec_text in getattr(ctx.args, 'object', None) or []:
+        name, sep, rest = spec_text.partition('=')
+        file_text, _, skip_text = rest.partition(':')
+        path = Path(file_text).expanduser()
+        if not sep or not name or len(name.encode()) > 31 or not path.is_file():
+            raise Error(f'--object {spec_text}: expected NAME=FILE[:OFFSET] with an existing file and a name under 32 bytes')
+        skip = int(skip_text, 0) if skip_text else 0
+        size = path.stat().st_size - skip
+        if skip < 0 or size <= 0:
+            raise Error(f'--object {spec_text}: offset outside the file')
+        objects.append((name, path, size, skip))
+    if len(windows) > 4 or len(objects) > 4:
         raise Error('userdata supports at most 4 windows and 4 objects')
-    names = [window['name'] for window in spec['windows']] + [name for name, _, _ in objects]
+    names = [window['name'] for window in windows] + [name for name, _, _, _ in objects]
     if len(names) != len(set(names)):
         raise Error('userdata window and object names must be unique')
     if dry_run:
-        for window in spec['windows']:
+        for window in windows:
             name, size, _ = source.info(window['component'])
             log(f'userdata: {window["name"]} would be extracted from {name} ({size >> 20} MiB)')
-        for name, path, size in objects:
+        for name, path, size, _ in objects:
             log(f'userdata: object {name} would be copied from {path} ({size} bytes)')
         log('userdata: dry run, nothing extracted or written')
         return None
-    sources = [(window['name'], source.extract(window['component'])) for window in spec['windows']]
+    sources = [(window['name'], source.disk_image(window['component'])) for window in windows]
     layout, cursor = [], MIB
     for name, dmg in sources:
         size = image_size(dmg)
         layout.append((name, cursor, size, 512, 1))
         cursor += (size + MIB - 1) // MIB * MIB
-    for name, path, size in objects:
+    for name, path, size, _ in objects:
         layout.append((name, cursor, size, 4096, 3))
         cursor = (cursor + size + 4095) // 4096 * 4096
     total = (cursor + 4095) // 4096 * 4096
@@ -139,7 +166,7 @@ def build(ctx, dry_run=False):
         raise Error('the image is larger than the userdata partition')
     for name, dmg in sources:
         log(f'userdata: {name} from {dmg.name}')
-    for name, path, size in objects:
+    for name, path, size, _ in objects:
         log(f'userdata: {name} from {path}')
     out, image, report = paths(ctx)
     out.mkdir(parents=True, exist_ok=True)
@@ -162,11 +189,12 @@ def build(ctx, dry_run=False):
                 raise Error(f'{dmg.name}: {done} bytes of raw disk, expected {size}')
             entries.append((name, offset, size, 512, 1, digest.digest()))
             log(f'userdata: {name} {size} bytes at {offset:#x} sha256 {digest.hexdigest()}')
-        for name, path, size in objects:
+        for name, path, size, skip in objects:
             offset = offset_of[name]
             digest = hashlib.sha256()
             target.seek(offset)
             with path.open('rb') as source_file:
+                source_file.seek(skip)
                 done = 0
                 while done < size:
                     data = source_file.read(min(CHUNK, size - done))

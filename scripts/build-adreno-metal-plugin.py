@@ -5,63 +5,146 @@ and the launchd probe daemon with its job plist (NativeAdrenoProbeDaemon.cpp).
 Output (ignored, never committed): build/adreno-metal-plugin/NativeAdrenoMetal.bundle with a 4 KiB-page ad-hoc signature, and
 trust.json with its CDHash. The bundle is staged into the Data seed by add-gpu-plugin-data.py and trusted through an extra
 owner trust module (make-owner-trust-bundle.py); neither changes the original trust modules, AMFI or any Apple signature."""
+import argparse
+import hashlib
 import json
 import plistlib
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'build/adreno-metal-plugin'
+# --target ios27: the arm64e build for iPadOS 27 (24A446), whose render server is an arm64e process.
+# --target macos27: the arm64e build for macOS 27 (26C5035r), in the macOS bundle layout (Contents/MacOS).
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--target', choices=('ios', 'ios27', 'macos27'), default='ios')
+parser.add_argument('--no-replay', action='store_true', help='omit the optional host simulation capture used by diagnostic probes')
+parser.add_argument('--translator-source', type=Path, help='use an existing pinned and patched translator checkout')
+parser.add_argument('--reuse-bridge', action='store_true', help='reuse the matching Rust archive for a frontend relink')
+parser.add_argument('--check-runtime-draws', action='store_true', help='enable runtime draw-state comparison diagnostics')
+args = parser.parse_args()
+MACOS = args.target == 'macos27'
+# IOS27 marks the arm64e builds (iPadOS 27 and macOS 27): pointer authentication, the PAC bridge and the arm64e checks.
+IOS27 = args.target in ('ios27', 'macos27')
+OUT = ROOT / 'build' / {'ios': 'adreno-metal-plugin', 'ios27': 'adreno-metal-plugin27', 'macos27': 'adreno-metal-plugin-macos27'}[args.target]
 bundle = OUT / 'NativeAdrenoMetal.bundle'
+# macOS bundles keep the executable in Contents/MacOS; Turnip stays beside it (turnip::libraryPath).
+contents = bundle / 'Contents' if MACOS else bundle
+code_dir = contents / 'MacOS' if MACOS else bundle
+# Data files of a macOS bundle are sealed only under Contents/Resources; codesign treats other files in Contents as code.
+resources = contents / 'Resources' if MACOS else bundle
 if OUT.exists():
     shutil.rmtree(OUT)
-bundle.mkdir(parents=True)
-sdk = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
-base = ['xcrun', 'clang', '-target', 'arm64-apple-ios17.0', '-isysroot', sdk, '-O2', '-g', '-Wall', '-Wextra', '-Werror',
+code_dir.mkdir(parents=True)
+resources.mkdir(parents=True, exist_ok=True)
+sdk = subprocess.check_output(['xcrun', '--sdk', 'macosx' if MACOS else 'iphoneos', '--show-sdk-path'], text=True).strip()
+base = ['xcrun', 'clang', '-target', {'ios': 'arm64-apple-ios17.0', 'ios27': 'arm64e-apple-ios27.0', 'macos27': 'arm64e-apple-macos27.0'}[args.target], '-isysroot', sdk, '-O2', '-g', '-Wall', '-Wextra', '-Werror',
         '-fstack-protector-strong']
+source_hash = hashlib.sha256()
+for path in sorted((ROOT / 'drivers/AdrenoMetal').rglob('*')):
+    if path.is_file() and '.git' not in path.parts and path.relative_to(ROOT / 'drivers/AdrenoMetal').parts[0] != 'tools' and path.suffix in ('.h','.mm','.cpp','.rs','.patch'):
+        source_hash.update(str(path.relative_to(ROOT / 'drivers/AdrenoMetal')).encode())
+        source_hash.update(path.read_bytes())
+metal_build_id = source_hash.hexdigest()
+base += ['-DNATIVE_METAL_BUILD_ID="' + metal_build_id + '"']
+(resources / 'gpu-build.json').write_text(json.dumps({'metal_source_sha256': metal_build_id, 'target': args.target}, indent=2)+'\n')
 VULKAN_INCLUDE = ROOT / '.cache/mesa-work/include'
-TURNIP = ROOT / 'build/mesa-tu-ios/src/freedreno/vulkan/libvulkan_freedreno.dylib'
+TURNIP = ROOT / 'build' / ('mesa-tu-' + args.target) / 'src/freedreno/vulkan/libvulkan_freedreno.dylib'
+turnip_profile = TURNIP.parents[3] / 'builtin-build-profile.json'
+if turnip_profile.is_file():
+    manifest = json.loads((resources / 'gpu-build.json').read_text())
+    manifest['turnip'] = json.loads(turnip_profile.read_text())
+    (resources / 'gpu-build.json').write_text(json.dumps(manifest, indent=2)+'\n')
 if not TURNIP.is_file():
-    raise SystemExit('Build Turnip first: python3 scripts/build-turnip-darwin.py --target ios')
+    raise SystemExit('Build Turnip first: python3 scripts/build-turnip-darwin.py --target ' + args.target)
 subprocess.run(['python3', ROOT / 'scripts/gen-turnip-smoke-shaders.py'], check=True)
 # Turnip's first submission, recorded on the host, for the plugin's prefix replay (build/turnip-smoke/TurnipReplay.h).
-subprocess.run(['python3', ROOT / 'scripts/gen-turnip-replay.py'], check=True)
-subprocess.run(['python3', ROOT / 'scripts/build-adreno-metal-bridge.py', '--target', 'ios'], check=True)
-BRIDGE = ROOT / 'build/adreno-metal-bridge/ios/libadreno_metal_bridge.a'
+if args.no_replay:
+    (ROOT / 'build/turnip-smoke/TurnipReplay.h').unlink(missing_ok=True)
+else:
+    subprocess.run(['python3', ROOT / 'scripts/gen-turnip-replay.py'], check=True)
+BRIDGE_TARGET = args.target
+bridge_command = ['python3', ROOT / 'scripts/build-adreno-metal-bridge.py', '--target', BRIDGE_TARGET]
+if args.translator_source:
+    bridge_command += ['--source', args.translator_source]
+if args.check_runtime_draws:
+    bridge_command += ['--check-runtime-draws']
+if args.reuse_bridge:
+    bridge_command += ['--reuse-current']
+subprocess.run([str(value) for value in bridge_command], check=True)
+BRIDGE = ROOT / 'build/adreno-metal-bridge' / BRIDGE_TARGET / 'libadreno_metal_bridge.a'
+manifest = json.loads((resources / 'gpu-build.json').read_text())
+manifest['component'] = subprocess.check_output(['git', '-C', str(ROOT / 'drivers/AdrenoMetal'), 'rev-parse', 'HEAD'], text=True).strip()
+bridge_identity = json.loads(BRIDGE.with_suffix('.a.json').read_text())['identity']
+manifest['bridge_component'] = bridge_identity['component']
+manifest['runtime_draw_checks'] = args.check_runtime_draws
+uuid_text = subprocess.check_output(['xcrun', 'dwarfdump', '--uuid', str(TURNIP)], text=True)
+turnip_uuid = re.search(r'UUID:\s+([0-9a-fA-F-]{36})', uuid_text)
+if not turnip_uuid:
+    raise SystemExit('Turnip must provide a Mach-O UUID for the shader cache identity')
+manifest['runtime'] = bridge_identity['runtime']
+manifest['turnip_uuid'] = turnip_uuid[1].replace('-', '').lower()
+manifest['cache_build'] = manifest['runtime'] + '-' + manifest['turnip_uuid']
+(resources / 'gpu-build.json').write_text(json.dumps(manifest, indent=2)+'\n')
+# arm64e: the Rust objects' imports that take a callback go through the signing wrappers of RustPacBoundary.c, and their indirect branches
+# are routed through its stripping trampolines after the link (scripts/rust-pac-rewrite.py).
+link_extra, PAC_RENAMES = [], {'_pthread_create': '_nmb_pac_pthread_create', '__tlv_atexit': '_nmb_pac_tlv_atexit',
+                               '_atexit': '_nmb_pac_atexit', '___cxa_atexit': '_nmb_pac_cxa_atexit',
+                               '__dyld_register_func_for_add_image': '_nmb_pac_dyld_register_func_for_add_image',
+                               '__Unwind_Backtrace': '_nmb_pac_Unwind_Backtrace', '_dlsym': '_nmb_pac_dlsym'}
+if IOS27:
+    objcopy = next(p for p in ['/opt/homebrew/opt/llvm/bin/llvm-objcopy', shutil.which('llvm-objcopy') or ''] if p and Path(p).exists())
+    pac_bridge = OUT / 'libadreno_metal_bridge_pac.a'
+    subprocess.run([objcopy, *[f'--redefine-sym={a}={b}' for a, b in PAC_RENAMES.items()], BRIDGE, pac_bridge], check=True)
+    BRIDGE = pac_bridge
+    boundary = OUT / 'RustPacBoundary.o'
+    subprocess.run([*base, '-std=c11', '-I', VULKAN_INCLUDE, '-c', ROOT / 'drivers/AdrenoMetal/bridge/RustPacBoundary.c', '-o', boundary],
+                   check=True)
+    link_extra = [boundary, '-Wl,-map,' + str(OUT / 'NativeAdrenoMetal.map')]
 pm4 = OUT / 'AdrenoPM4.o'
 subprocess.run([*base, '-std=c11', '-c', ROOT / 'kits/AdrenoPM4/AdrenoPM4.c', '-o', pm4], check=True)
-exe = bundle / 'NativeAdrenoMetal'
+exe = code_dir / 'NativeAdrenoMetal'
 # The OS image's .metallib paths (build/prime-list.txt, one per line), carried in the executable's __DATA,__primelist section as well: the
 # render server's sandbox may refuse to read the list file beside the bundle, and the plugin then primes from this copy (PrimeShaders.h).
 PRIME_LIST = ROOT / 'build/prime-list.txt'
-prime_section = [f'-Wl,-sectcreate,__DATA,__primelist,{PRIME_LIST}'] if PRIME_LIST.is_file() else []
+prime_section = [f'-Wl,-sectcreate,__DATA,__primelist,{PRIME_LIST}'] if PRIME_LIST.is_file() and not MACOS else []
 subprocess.run([*(['xcrun', 'clang++'] + base[2:]), '-std=c++17', '-fobjc-arc', '-Wno-deprecated-declarations', '-bundle',
                 '-I', ROOT / 'drivers/Adreno740', '-I', ROOT / 'kits/AdrenoPM4', '-I', VULKAN_INCLUDE, '-I', ROOT / 'build/turnip-smoke',
                 '-x', 'objective-c++', ROOT / 'drivers/AdrenoMetal/NativeAdrenoMetalPlugin.mm',
                 ROOT / 'drivers/AdrenoMetal/NativeBridgeMetalFrontend.mm', '-x', 'none', pm4, BRIDGE,
-                '-Wl,-dead_strip', *prime_section, '-lobjc', '-framework', 'Foundation', '-framework', 'Metal', '-framework', 'IOSurface', '-o', exe],
+                *link_extra, '-Wl,-dead_strip', *prime_section, '-lobjc', '-framework', 'Foundation', '-framework', 'Metal', '-framework', 'IOSurface',
+                # macOS: the device class subclasses IOGPU's IOGPUMetalDevice (the SDK's private IOGPU.tbd exports it) and the
+                # IOGPU adapter (IOGPUMetalDeviceShim.h) keeps the accelerator port with IOKit.
+                *(['-F', f'{sdk}/System/Library/PrivateFrameworks', '-framework', 'IOGPU', '-framework', 'IOKit'] if MACOS else []), '-o', exe],
                check=True)
+if IOS27:
+    subprocess.run(['python3', ROOT / 'scripts/rust-pac-rewrite.py', exe, OUT / 'NativeAdrenoMetal.map', 'libadreno_metal_bridge_pac.a'],
+                   check=True)
 subprocess.run(['strip', '-x', exe], check=True)
 # The linker writes the debug symbols of the Rust bridge next to the executable; keep them beside the bundle, not in the image.
 symbols = OUT / 'NativeAdrenoMetal.dSYM'
 shutil.rmtree(symbols, ignore_errors=True)
-if (bundle / 'NativeAdrenoMetal.dSYM').exists():
-    shutil.move(bundle / 'NativeAdrenoMetal.dSYM', symbols)
+if (code_dir / 'NativeAdrenoMetal.dSYM').exists():
+    shutil.move(code_dir / 'NativeAdrenoMetal.dSYM', symbols)
 # Turnip (the real Mesa Vulkan driver with the native Darwin kernel backend) travels inside the plugin bundle, signed on its own with 4 KiB pages so its
 # CDHash can be trusted like the plugin's. It is signed before the bundle so the bundle's resource seal covers the final bytes.
-turnip_lib = bundle / 'libvulkan_freedreno.dylib'
+turnip_lib = code_dir / 'libvulkan_freedreno.dylib'
 shutil.copyfile(TURNIP, turnip_lib)
 subprocess.run(['strip', '-x', turnip_lib], check=True)
+# Mesa's entry point tables name every Vulkan entry point through weak declarations; the ones Turnip leaves out are weak imports
+# looked up in the flat namespace, which dyld searches every loaded image for in each process that opens a device. Bound to the
+# library itself they stay NULL without the search.
+subprocess.run([sys.executable, ROOT / 'scripts/macho-self-bind-weak-imports.py', turnip_lib], check=True)
 subprocess.run(['codesign', '--force', '--sign', '-', '--pagesize', '4096', '--identifier', 'org.blu-sharky.turnip', turnip_lib], check=True)
 turnip_detail = subprocess.run(['codesign', '--display', '--verbose=4', turnip_lib], capture_output=True, text=True, check=True).stderr
 turnip_cdhash = re.search(r'^CDHash=([a-f0-9]{40})$', turnip_detail, re.M)[1]
 assert re.search(r'^Page size=4096$', turnip_detail, re.M)
-(bundle / 'Info.plist').write_bytes(plistlib.dumps(dict(
+(contents / 'Info.plist').write_bytes(plistlib.dumps(dict(
     CFBundleIdentifier='org.blu-sharky.NativeAdrenoMetal', CFBundleExecutable='NativeAdrenoMetal', CFBundlePackageType='BNDL',
     CFBundleVersion='1', CFBundleShortVersionString='1', NSPrincipalClass='NativeAdrenoMetalDevice',
-    MinimumOSVersion='17.0'), fmt=plistlib.FMT_XML))
+    **({'LSMinimumSystemVersion': '27.0'} if MACOS else {'MinimumOSVersion': '27.0' if IOS27 else '17.0'})), fmt=plistlib.FMT_XML))
 subprocess.run(['codesign', '--force', '--sign', '-', '--pagesize', '4096', '--identifier', 'org.blu-sharky.NativeAdrenoMetal',
                 bundle], check=True)
 subprocess.run(['codesign', '--verify', '--strict', bundle], check=True)
@@ -70,7 +153,7 @@ cdhash = re.search(r'^CDHash=([a-f0-9]{40})$', detail, re.M)[1]
 assert re.search(r'^Page size=4096$', detail, re.M), 'the signature must use 4 KiB pages'
 header = exe.read_bytes()[:16]
 magic, cputype, subtype = int.from_bytes(header[0:4], 'little'), int.from_bytes(header[4:8], 'little'), int.from_bytes(header[8:12], 'little')
-assert (magic, cputype, subtype & 0xffffff) == (0xfeedfacf, 0x100000c, 0), 'expected an ordinary ARM64 (subtype 0) Mach-O'
+assert (magic, cputype, subtype & 0xffffff) == (0xfeedfacf, 0x100000c, 2 if IOS27 else 0), 'expected an arm64e (27) or ARM64 (17) Mach-O'
 # The probe daemon (launchd starts it as an owner job). The original platform sandbox policy refuses IOServiceOpen for any user-client class
 # a process has not been granted (the same refusal an unentitled consumer got in the offline owner tests), so it carries exactly the grant that
 # worked there: com.apple.security.iokit-user-client-class naming the one class it opens, plus no-container.
@@ -108,4 +191,6 @@ assert re.search(r'^Page size=4096$', detail, re.M)
 (OUT / 'trust.json').write_text(json.dumps(dict(cdhash=cdhash, daemon_cdhash=daemon_cdhash, turnip_cdhash=turnip_cdhash, bundle='NativeAdrenoMetal.bundle',
     executable_bytes=exe.stat().st_size, purpose='owner-built plugin and probe daemon; trusted only through an extra owner trust module'),
     indent=2) + '\n')
+if MACOS:
+    subprocess.run([sys.executable, ROOT / 'drivers/AdrenoMetal/tools/build-shader-cache-app.py', OUT], check=True)
 print('PASS: Adreno plugin bundle and probe daemon built and 4K-signed, CDHashes', cdhash, daemon_cdhash, turnip_cdhash)

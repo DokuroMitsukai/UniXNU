@@ -8,13 +8,13 @@ A community-maintained port for SM8550. Current results are based on the maintai
 
 ## State
 
-The macOS 26.5 QEMU path runs the original arm64e `launchd`, `sh` and `bash`, uses a temporary Data volume and reaches Aqua initialization. WindowServer HID and display integration remain pending.
+The paired macOS 26.5 / 25F71 kernel and recovery userland run the original arm64e `launchd` in QEMU and on sheng hardware. Hardware records cover BaseSystem and ISC mounts, temporary Data and template copying. Logs persist through `macoslog` and are read back after reboot.
 
-On sheng hardware, the recorded result is a UEFI EL1 probe. The QEMU userland results have their own configuration and evidence.
+WindowServer repeatedly exits during HID and display initialization. Graphical Recovery remains pending. Follow the current status record for the paired inputs and hardware configuration.
 
 ## Sources
 
-- [README: Jelly10086/macOS-ForSheng](https://github.com/Jelly10086/macOS-ForSheng/blob/daec3714f8b4e12f5cd129efa79be894511353e5/README.md)
+- [Status: Jelly10086/macOS-ForSheng](https://github.com/Jelly10086/macOS-ForSheng/blob/4ec9620f127fe0daa7e9e9498ee7b0d374fd032f/docs/status.md)
 
 ## Use this port
 

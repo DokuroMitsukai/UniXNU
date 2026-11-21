@@ -1,0 +1,189 @@
+schema_version = 1
+
+[device]
+name = "pudding"
+soc = "SM8850"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Xiaomi 17 (p11u). SoC values dual-verified (pandora live + pudding vendor DTB); board values from p11u-family dtbo. Pending: userdata GPT, RAM size, PON APID."
+
+[[area]]
+id = "configuration"
+status = "planned"
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoot", "AppleKeyStoreState"]
+paths = ["board.toml", "feeds.toml", "configs/**", ".gitmodules", ".github/**", ".gitignore"]
+inputs = ["Identify the configuration hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for configuration."]
+procedure = ["Follow the configuration stage in the porting guide and record the actual commands."]
+findings = ["2026-10-26: SoC feed sm8850 drafted (UniXNU-sm8850-common local). Board config written from p11u dtbo + pandora cross-checks.", "bootimg header v4 confirmed (TWRP BoardConfig BOARD_BOOT_HEADER_VERSION=4, pagesize 4096, boot partition 0x6000000).", "2026-11-11: board.toml pins the iPadOS 17.7.11 OS volume UUID and adds rd=puddingufs0 plus logger kernel arguments; the defconfig documents why the pinned-file root device is a BSD driver."]
+completion = ["All source pins resolve; every selected component has a record; status shows the intended overrides and patch order."]
+limits = ["feeds.toml commit is REQUIRED_SOC_COMMIT until the sm8850 repo is published.", "userdata first/last_lba are zeros pending live GPT export."]
+next_action = ["Publish UniXNU-sm8850-common and pin its commit; read-only GPT export from live device."]
+evidence = []
+
+[[area]]
+id = "firmware"
+status = "planned"
+components = ["GopFramebuffer"]
+paths = ["proprietary-files.txt", "scripts/extract-files.py", "scripts/gen-touch-firmware.py"]
+inputs = ["Identify the firmware and boot hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for firmware and boot."]
+procedure = ["Follow the firmware and boot stage in the porting guide and record the actual commands."]
+findings = ["Collect the first firmware and boot observation, its cause when established, and the resulting implementation decision."]
+completion = ["Firmware image builds, enters UniXNU, publishes the framebuffer and preserves the documented memory reservations."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required firmware and boot inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "cpu"
+status = "planned"
+components = []
+paths = ["package/CpuFreq*", "scripts/*armcpu*"]
+inputs = ["Identify the cpu and interrupts hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for cpu and interrupts."]
+procedure = ["Follow the cpu and interrupts stage in the porting guide and record the actual commands."]
+findings = ["Collect the first cpu and interrupts observation, its cause when established, and the resulting implementation decision."]
+completion = ["Every enabled CPU reaches its entry checkpoint and timer/IPI handling works on each enabled CPU."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required cpu and interrupts inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "memory"
+status = "planned"
+components = []
+paths = ["dts/**", "package/*Smmu*", "package/*Memory*", "scripts/*smmu*", "scripts/*memory*"]
+inputs = ["Identify the memory and dma hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for memory and dma."]
+procedure = ["Follow the memory and dma stage in the porting guide and record the actual commands."]
+findings = ["Collect the first memory and dma observation, its cause when established, and the resulting implementation decision."]
+completion = ["All handoff regions are accounted for and each enabled DMA engine accesses its allocated range with the documented cache policy."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required memory and dma inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "storage"
+status = "implemented"
+components = ["VerifiedRoot"]
+paths = ["scripts/pudding_ufs.c.txt", "scripts/pudding_ufs_extents.h", "scripts/patch-pudding-ufs.py", "scripts/patch-pudding-*.py", "scripts/pudding_rd*", "scripts/vendor/**", "scripts/*ufs*", "scripts/*storage*", "scripts/*userdata*", "scripts/*root*"]
+inputs = ["SM8850 UFS host reuses bootloader-initialized UTRL; UFS LUN 0xD0; SMMU SID 0x60 remains bootloader passthrough; 4 KiB native blocks; userdata GPT range 3535360..128627706.", "Persistent diagnostics are limited to the pinned iosroot file's unused tail, after the 2,290,688-block image boundary; no Android partition or slot writes."]
+configuration = ["BSD bdevsw root reader is selected; ShengUfs/IOStorageFamily static linkage is disabled because required private symbols are not exported.", "READ CAPACITY(10) requires 4096-byte blocks; GPT header/entry CRCs, type GUID and exact userdata bounds are validated.", "Pinned extents map file blocks [2290688,2290945) to userdata-relative blocks [40995328,40995585); all 257 blocks are unique, contiguous, within userdata, and the extent set has no overlap.", "Logger-owned UFS commands use try-lock and return EBUSY on lock contention; ordinary BSD root reads retain blocking command-lock semantics.", "Logger bootstrap is serialized with an atomic start guard; header write/sync failures schedule delayed callout retry, and syscall pump retries initialization if thread-call allocation fails."]
+procedure = ["Generate bsd/dev/pudding_ufs.c with scripts/patch-pudding-ufs.py.", "Run device-dump/check_log_extents.py, device-dump/test_pudding_gpt_guard.py and device-dump/verify_all_patches.sh; focused-compile with device-dump/compile_any.py pudding_ufs.c.", "Boot only with fastboot boot; retrieve the pinned log region read-only from Android after return."]
+findings = ["2026-11-11 23:20: Implemented compact signed-prefix BSD VerifiedRoot integration. Shared C adapter reconstructed both complete source windows read-only (2,290,185 hashes), byte-identical to original authenticated envelopes; exact generation1, imageSHA256, full-envelopeSHA384, OS1536-byte final block and GPT slice+17408 checked. Fresh blocks are verified within bounce lock before copying. Original verifier/crypto sources remain hash-pinned and unchanged. APFS selected volume UUID plus actual readonly root/cache devices bind original owner publisher; callback readiness fails closed. Host negative/sanitizer tests and six affected focused ARM64 translation units pass; publisher independent review passed after errno inversion repair. Full build/UFS review pending; no device runtime authentication/publication claim and no device operations. See device-dump/pudding-verified-root-runtime-report.md and docs/PROGRESS.md in workspace.", "2026-11-11: Host-only staging repair limits payload to DATA_BYTES - in_block so the OS slice remainder cannot overflow the actual 128 KiB allocation. A separate static bounce mutex spans all fragmented reads through successful copy; strategy lock order is bounce then command, logger remains log then command without bounce, and probe uses staging only before ready. Six host tests cover 45,056 bounds cases, exact bytes, concurrency/failure models and original-defect negative controls; independent review and focused generated pudding_ufs.c compilation passed. No full rebuild or hardware validation of this repair yet; pinned-tail write boundaries are unchanged.", "The BSD bdevsw path reaches real UFS GPT/manifest and APFS root reads; it avoids unsupported static IOStorageFamily linkage.", "Screen evidence reached periodic log flush and ring read, but did not show a return marker. The read path can block on pudding_ufs_cmd_lock before its bounded UFS command poll, so logger requests now try-lock and should retry on the next scheduled interval.", "The earlier raw ring had header v1/seq=0/total=0 and SHA-256 2ad7d9db9c7270e957232d795c36cb2c33e8c06cac965979331dbd4876e428a4; it was stale, not current-boot evidence.", "2026-11-10: Replaced logger destination read-modify-write with a full 4 KiB RAM-ring block copy. Device boot committed header seq=99,total=42884; ring write, ring sync, header write/sync and final flush all returned 0. Fresh raw log SHA-256 400063aff2b3cc90858630089f3c4513cf50213869a64c81f8d4b6cb7ca2adaf.", "The same boot reached launchd and dyld shared-region mapping; syscall 536 returned 0. It then entered _DebuggerTrapWithState+0xec (ESR EC=0/TRAP_DEBUGGER); the original panic message is not present in the committed ring and remains unresolved."]
+completion = ["Host: capacity, GPT, pinned extents, write allowlist and focused compilation pass.", "Device: current RAM boot produces a fresh committed logger header/ring and periodic try-lock retries do not stall root reads.", "Root: the configured APFS root mounts and launchd continues beyond the last recorded syscall."]
+limits = ["Fresh logger persistence is device-verified, but panic snapshot capture/clean-sync gate and original panic cause remain unverified.", "No display, touch, GPU, Wi-Fi, audio or sustained power-management milestone is claimed here."]
+next_action = ["Trace panic snapshot generation, debugger clean-sync eligibility, lock/controller preflight and panic-log commit without widening the pinned-tail write allowlist; then continue beyond shared-region syscall 536."]
+evidence = [{ kind = "source", reference = "scripts/pudding_ufs.c.txt", result = "BSD UFS reader, GPT/capacity validation, bounded logger write window, and logger-only try-lock implementation." }, { kind = "source", reference = "scripts/pudding_ufs_extents.h", result = "Static FIEMAP extent table for the pinned image, including the dedicated log tail." }, { kind = "source", reference = "scripts/patch-pudding-ufs.py", result = "Generates the maintained UFS implementation into the active XNU work tree." }]
+
+[[area]]
+id = "display"
+status = "planned"
+components = []
+paths = ["package/*Display*", "package/*Framebuffer*", "package/*Backlight*", "package/AppleARMBacklight.cpp", "package/GeniI2c*", "scripts/*display*", "scripts/*gop*", "scripts/*framebuffer*"]
+inputs = ["Identify the display hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for display."]
+procedure = ["Follow the display stage in the porting guide and record the actual commands."]
+findings = ["2026-10-26: p11u-family dtbo primary panel = 'xiaomi p11u 42 0d 0a cmd mode dsc dsi panel' (NT37801 DDIC + CSOT AMOLED, LTPS): active area 1200x2608 (0x4b0 x 0xa30), 4 DSI lanes, DSC v1.2 (600x16 slices, 2/pkt, 8bpp), 60/90/120Hz timings.", "Panel GPIOs: reset 98, ESD IRQ 97, nt336-ason08 212, ason18 214. Backlight: bl_ctrl_dcs, bl-inverted-dbv, min 5 / max 0x3fff.", "splash/cont_splash_region 0xfc800000/0x2b00000 - three-way agreement (p11u dtbo fragment@179, pandora live, infiniti Display_Reserved).", "GOP handoff path chosen (GopFramebuffer); MDSS top-level registers must never be touched (unclocked reads reset the chip)."]
+completion = ["A known frame appears with correct geometry and colors, then userland presentation and backlight controls work."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required display inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["drivers/ShengHidInput", "drivers/ShengNovatekTouch", "package/*Touch*", "package/*Button*", "scripts/*touch*", "scripts/*hid*"]
+inputs = ["Identify the input hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for input."]
+procedure = ["Follow the input stage in the porting guide and record the actual commands."]
+findings = ["2026-10-26: vol+ = TLMM GPIO 101 (pudding DTB pinctrl key-vol-up-default-state + p11u dtbo gpio_keys vol_up, dual-confirmed). TLMM real base 0x0f100000 (vendor DT 0x0f000000 is wrong; wrong read = bus hang + reset).", "Touch primary (p11u dtbo fragment@46): FocalTech focaltech_ts@0 on QUP4 SE0 SPI @0x1a80000, irq GPIO 158, reset GPIO 66, max 1200x2608, RX18xTX39, 15MHz SPI, trusted-touch vm_mode.", "TWRP tree shows Synaptics S3910P + Novatek NT38773 alternates (production multi-sourcing). FocalTech first, Synaptics fallback.", "power/vol- on PMK8850 PON SPMI (pandora APID 465 assumed; pudding APID not in available DTBO - live verify needed)."]
+completion = ["Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, and buttons produce expected HID reports."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required input inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["package/*Gpu*", "package/*Gmu*", "package/*Adreno*", "scripts/*adreno*", "scripts/*gpu*", "scripts/*metal*", "scripts/*turnip*", "scripts/*air*"]
+inputs = ["Identify the gpu hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for gpu."]
+procedure = ["Follow the gpu stage in the porting guide and record the actual commands."]
+findings = ["2026-10-26: pudding DTB confirms Adreno840v2 (gpu-model 'Adreno840v2', chipid 0x44050a01, qcom,ubwc-mode 6, compatible qcom,adreno-gpu-gen8-2-1), reg set kgsl_3d0 0x3d00000/0x40000 + rscc 0x3d50000 + cx_dbgc 0x3d61000 + cx_misc 0x3d9e000, IRQ SPI 300 + cx_host SPI 80.", "GMU gen8 @0x3d37000/0x68000 + ao_blk 0x3d40000, hfi SPI 304 / gmu SPI 305, hub OPP 150-400MHz; gpu_microcode(zap) region 0x9959a000/0x2000.", "GPU SMMU 0x3da0000 (qsmmu-v500/adreno-smmu, stream 5 for GMU)."]
+completion = ["GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required gpu inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["drivers/Ath12kWifi", "package/*Wifi*", "package/MhiBoot*", "scripts/*wifi*", "scripts/*mhi*"]
+inputs = ["Identify the network hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for network."]
+procedure = ["Follow the network stage in the porting guide and record the actual commands."]
+findings = ["Collect the first network observation, its cause when established, and the resulting implementation decision."]
+completion = ["Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required network inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["package/*Adsp*", "package/*Audio*", "package/*Gpr*", "package/QcomGlink*", "package/QcomMdt*", "package/QcomSmem*", "package/QcomSmp2p*", "scripts/*adsp*", "scripts/*audio*", "scripts/*gpr*"]
+inputs = ["Identify the audio hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for audio."]
+procedure = ["Follow the audio stage in the porting guide and record the actual commands."]
+findings = ["Collect the first audio observation, its cause when established, and the resulting implementation decision."]
+completion = ["Each declared route carries the selected audio format through playback or capture and handles start/stop correctly."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required audio inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["package/*Battery*", "package/*Battmgr*", "package/*Power*", "package/*PlatformPower*", "package/QcomQmp*", "package/QcomRpmh*", "package/QcomScm.h", "scripts/*power*", "scripts/*battery*", "scripts/*pmgr*"]
+inputs = ["Identify the power hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for power."]
+procedure = ["Follow the power stage in the porting guide and record the actual commands."]
+findings = ["Collect the first power observation, its cause when established, and the resulting implementation decision."]
+completion = ["Declared power controls and battery readings match observations; each claimed sleep/resume transition restores its dependent peripherals."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required power inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "packaging"
+status = "planned"
+components = []
+paths = ["scripts/*payload*", "scripts/*image*", "scripts/*flash*", "patches/**", "package/Kit.toml"]
+inputs = ["Identify the image assembly hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for image assembly."]
+procedure = ["Follow the image assembly stage in the porting guide and record the actual commands."]
+findings = ["2026-11-11: Host fixture scripts/test-pudding-verified-root-image.c was added to exercise the storage image layout; payload and image assembly are unchanged."]
+completion = ["Kernel and prelink succeed, payload contains all declared inputs, and the boot image matches the bootloader format and size limit."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required image assembly inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "diagnostics"
+status = "planned"
+components = []
+paths = ["scripts/check-*", "scripts/probe-*", "scripts/audit-*", "scripts/read-*", "scripts/prepare-*", "scripts/data/**", "package/tests/**", "package/*Tests*", "package/*Diagnostic*", "package/*Probe*", "package/Boot*", "package/linux-log/**", "unixnu.lock"]
+inputs = ["Identify the diagnostics hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for diagnostics."]
+procedure = ["Follow the diagnostics stage in the porting guide and record the actual commands."]
+findings = ["2026-11-11: check-pudding.py now requires owned_memory_size in 256 MiB..8 GiB at 2 MiB steps, not exceeding dram_size, and the DTS memory node must match dram_size."]
+completion = ["Each claimed milestone has a reproducible command, a matching source/image revision and an accessible result."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required diagnostics inputs before implementation."]
+evidence = []

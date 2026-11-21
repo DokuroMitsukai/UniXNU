@@ -8,11 +8,13 @@ A community-maintained port for SM8750. Current results are based on the maintai
 
 ## State
 
-UEFI display and keys work on hardware. XNU starts six CPUs through PSCI, and the 160 MiB payload builds. The current device run waits for the root device. The root UUID adjustment requires another device run; Data, GPU and touch integration remain pending.
+The device reaches Hello through UEFI, XNU, six CPUs and the physical root volume. The 160 MiB payload includes OS/SystemOS extraction, UFS policies and RAM Data.
+
+Persistent Data, GPU acceleration and physical touch remain pending. The source contains S3910 touch work that needs its own device validation.
 
 ## Sources
 
-- [README: 2426120557/UniXNU-hummer](https://github.com/2426120557/UniXNU-hummer/blob/a24338025de2c8e1629f090ea4c3a51f980388a0/README.md)
+- [README: 2426120557/UniXNU-hummer](https://github.com/2426120557/UniXNU-hummer/blob/3d3d8ccd7e9544aefa5fb14ba8baad977828b435/README.md)
 
 ## Use this port
 

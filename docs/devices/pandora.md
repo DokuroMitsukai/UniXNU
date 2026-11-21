@@ -8,13 +8,13 @@ A community-maintained port for SM8850. Current results are based on the maintai
 
 ## State
 
-The iOS 16.7.16 system reaches the home and lock screens with touch and physical buttons. The port uses a device loader, native UFS and a file-backed root in Android userdata.
+The device reaches the iOS 16.7 home screen and runs apps with touch, power/volume keys and brightness control. All eight CPUs run, with load-based frequency changes, idle sleep and thermal throttling recorded.
 
-Adreno 840 integration includes Vulkan and Metal, and the maintainer records the first GPU-rendered home-screen frame. Rapid interaction can hang the system. CPU rendering remains the default while GPU stability is investigated.
+The maintainer records GPU composition of the system UI through Adreno 840, Turnip Vulkan and the Metal translation layer. The panel scans out the rendered buffers directly; the reported animation rate is about 110 frames/s on a 120 Hz panel. Audio DSP startup and communication work; speaker playback, real battery reporting, Wi-Fi, cellular and camera support remain pending.
 
 ## Sources
 
-- [README: ShueiTsuki/data-a-live](https://github.com/ShueiTsuki/data-a-live/blob/1a6c05fbc03695adb41a636210b9c48f40e14563/README.md)
+- [README: ShueiTsuki/data-a-live](https://github.com/ShueiTsuki/data-a-live/blob/91f1f2468f30841c39123c7ba20ae520ecd82c84/README.md)
 
 ## Build
 

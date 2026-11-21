@@ -1,5 +1,7 @@
 # Skip Setup
 
+macOS 按[创建账户并跳过 Setup](/zh/porting/macos#account)操作。以下步骤适用于 iPadOS。
+
 需要 macOS 镜像工具、匹配的 packed Data seed 和设备 `skip_setup_tool`，按[构建指南](/zh/building)准备。执行下方 payload 命令后，再运行 `./unixnu bootimg` 并启动新打包的镜像。
 
 全新的 Data 种子首次启动会进入 Setup。负载可以在写镜像前把 Setup 标记为完成，让设备直接进入 SpringBoard。
@@ -83,13 +85,13 @@ BUILD, VERSION = '21H461', '17.7.11'
 
 ## 任务
 
-Setup 依赖的服务在这个平台上不运行。板级文件用启动参数停掉它们：
+在 sheng 的 iPadOS 27.0.1（24A446）上，`lite=1` 允许 launchd 按需启动 `iconservicesagent`。IconRendering 使用 Metal。该服务设置 `FORCE_SOFTWARE_RENDERER=0` 和 `CI_ENABLE_METAL_GPU=0`。J820 原厂配置的非活跃硬上限为 15 MiB，活跃软上限为 1,224 MiB。
+
+`lite=2` 停用图标服务。主屏幕和 Dock 只显示图标底板，「设置」仍可打开。也可用 `disable-jobs` 单独指定服务，多个 launchd 标签用逗号分隔。
 
 ```
-sheng-disable-jobs=com.apple.identityservicesd,com.apple.locationd,com.apple.CommCenter,com.apple.iconservices.iconservicesagent
+disable-jobs=com.apple.identityservicesd,com.apple.locationd
 ```
-
-`com.apple.CommCenter` 是蜂窝服务。列表是板级配置。保留用户态需要的服务，移除阻塞首次启动的服务。
 
 ## 输出
 
@@ -118,7 +120,7 @@ out/<device>/<os_profile>/<config>/payload/payload.json
 3. 运行 `./unixnu bootimg`，再启动新生成的镜像。
 4. 日志到达 SpringBoard，不再停留在 Setup 页面。
 
-参考实现是本仓库的 `scripts/seed-data-skip-setup.py`。sheng 移植记录了使用这些改动的首次硬件启动。
+参考实现是本仓库的 `scripts/seed-data-skip-setup.py`。
 
 ## 下一步
 

@@ -8,12 +8,16 @@
 
 该组件处理 AppleKeyStore selector 和所选 OS 配置使用的状态回调，运行时服务与符号记录在组件目录中。
 
+密钥封装由软件完成：设备密钥来自板级通过 `native_aks_device_id` 返回的标识，keychain 用它存取条目。这不是硬件数据保护。不支持引用密钥操作和设备锁定。
+
+没有 keybag 时，板级设置 `aks-sls=3`，上报无密码。
+
 ## 集成
 
 组件目录记录实现范围、硬件与 OS 要求、板级依赖、源码版本、构建阶段、输出和运行时标识符。所选配置按依赖顺序运行构建命令。
 
 ```sh
-./unixnu build kernel -D ../UniXNU-sheng
+./unixnu build kernel -D /path/to/device
 ```
 
 [组件目录](/zh/reference/components)

@@ -8,11 +8,13 @@
 
 ## 当前状态
 
-UEFI 显示和按键已在实机工作。XNU 通过 PSCI 启动六个 CPU，160 MiB 负载可构建。当前实机运行等待根设备。根卷 UUID 调整待实机验证，Data、GPU 和触控集成待完成。
+设备已通过 UEFI、XNU、六个 CPU 和物理根卷到达 Hello。160 MiB 负载包含 OS/SystemOS 提取结果、UFS 策略和内存 Data。
+
+持久化 Data、GPU 加速和物理触控待完成。源码包含 S3910 触控适配，仍需单独进行设备验证。
 
 ## 来源
 
-- [README: 2426120557/UniXNU-hummer](https://github.com/2426120557/UniXNU-hummer/blob/a24338025de2c8e1629f090ea4c3a51f980388a0/README.md)
+- [README: 2426120557/UniXNU-hummer](https://github.com/2426120557/UniXNU-hummer/blob/3d3d8ccd7e9544aefa5fb14ba8baad977828b435/README.md)
 
 ## 使用此移植
 

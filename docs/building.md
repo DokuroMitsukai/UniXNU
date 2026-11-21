@@ -11,21 +11,25 @@ Build the device firmware with `./unixnu build firmware --uefi ../uefi-<device>`
 Read [Requirements](/guide/requirements), then choose a port from
 [Devices](/devices/). New ports follow [Port a device](/porting/steps) first.
 Obtain the port's device and UEFI repositories, including their submodules.
-For example, sheng uses:
+Set the repository URLs and defconfig for the selected port:
 
 ```sh
+DEVICE_REPOSITORY=https://github.com/your-org/UniXNU-myboard
+UEFI_REPOSITORY=https://github.com/your-org/uefi-myboard
+DEFCONFIG=myboard_defconfig
 git clone --recurse-submodules https://github.com/UniXNU/UniXNU
-git clone --recurse-submodules https://github.com/UniXNU/UniXNU-sheng
-git clone --recurse-submodules https://github.com/UniXNU/uefi-sheng
+git clone --recurse-submodules "$DEVICE_REPOSITORY" UniXNU-device
+git clone --recurse-submodules "$UEFI_REPOSITORY" uefi-device
 cd UniXNU
-./unixnu defconfig sheng_defconfig -D ../UniXNU-sheng
+./unixnu defconfig "$DEFCONFIG" -D ../UniXNU-device
 ./unixnu fetch
 ./unixnu status --json
 ```
 
-Use your port's repository and defconfig names. `status` reports the effective
-profiles, revisions, patch order and output directory. `-D` is remembered in
+`status` reports the effective profiles, revisions, patch order and output directory. `-D` is remembered in
 `out/state.json`. Run subsequent commands from the main UniXNU checkout.
+`--os VERSION` selects another OS profile for one command. A macOS build passes
+`--os macos-27` to every command and follows [macOS profile](/porting/macos).
 
 **Expected result:** the intended device/configuration and resolved source paths.
 
@@ -37,9 +41,8 @@ cp unixnu.example.toml unixnu.local.toml
 
 Fill the local file using [local build configuration](/reference/configuration#local-build-inputs).
 Set the device and UEFI paths, firmware DTB, platform identity and required
-kernelcache, trust-cache and Data seed inputs. Use the board's inventory;
-[sheng build inputs](/porting/migration#build-inputs) lists its additional SDK,
-firmware and ABI requirements.
+kernelcache, trust-cache and Data seed inputs. Use the board's inventory and the
+[build-input checklist](/porting/migration#build-inputs) for SDK, firmware and ABI requirements.
 
 ```sh
 ./unixnu ipsw info
@@ -63,6 +66,22 @@ a recipe that consumes them.
 Run each command after the preceding one succeeds. [Kernel preparation](/guide/build-kernel)
 explains archive/ABI requirements and prelink. [Firmware integration](/porting/uefi-firmware#required-integration)
 explains the required DSC/FDF modules.
+
+Standard `unixnu` commands color status prefixes in a terminal. Blue marks
+progress, green completion, yellow warnings and red failures. This includes pip,
+CMake and compiler diagnostics. Redirected output, `--json`, `NO_COLOR` and
+`TERM=dumb` remain uncolored. Per-step log files remain plain text.
+
+Source-storage compilation writes complete per-source logs under `<tree>/build/sheng-source-storage/`; failures print the last 6000 characters. Runtime Metal-library inventory mounts auxiliary cryptexes in the system temporary directory, so the build output may reside on an attached disk image.
+
+To also save the complete command output:
+
+```sh
+python3 scripts/build-log.py --log out/build.log -- ./unixnu build kernel
+```
+
+The optional wrapper returns the command's exit status. `--color never` disables
+colors; `--color always` enables them in redirected output unless `NO_COLOR` is set.
 
 | Step | Expected output |
 | --- | --- |
@@ -161,6 +180,10 @@ The candidate names and the display or kernelcache inputs come from the device r
 
 The workflow runs kernel, userdata and payload. Package, firmware and boot image commands run locally on supported macOS or Linux hosts. Check the workflow and account runner settings before using hosted builds.
 
+### Sheng macOS lab
+
+The [sheng macOS lab workflow](https://github.com/UniXNU/UniXNU-sheng/actions/workflows/macos-lab.yml) selects the core checkout through `core_ref`, which defaults to `main`. Use a branch, tag or full 40-character commit SHA. Set it to the local core revision for a matching CI build. `root_storage=false` builds the boot image while retaining the installed root storage and Data.
+
 ## Linux host
 
 The installer supports apt, dnf, pacman and zypper on glibc Linux. Use `--package-manager none` with prepared dependencies and `--llvm-config FILE` for a specific host LLVM. See [Linux requirements](/guide/requirements#linux).
@@ -204,6 +227,7 @@ The Linux path uses the same selected profiles, archive recipes and prelink chec
 | Option | Meaning |
 | --- | --- |
 | `-D DIR` | Device repository. Remembered after the first use. |
+| `--os VERSION` | OS profile for this run: `17`, `26`, `27`, `macos-27` or a `profiles/os` directory name. Default `board.os_profile`. |
 | `--out DIR` | Output root. Default `out/` in this repository. |
 | `-j N` | Parallel jobs. Default is `JOBS` or the CPU count. |
 | `--target DEBUG\|RELEASE` | EDK II build target. Default `DEBUG`. |
@@ -249,6 +273,10 @@ Modules are symbolic links to their sources. Scripts are copied. The device `pac
 ### ipsw
 
 The IPSW is read member by member. A remote IPSW is never downloaded as a whole. The zip directory and each needed member are read with HTTP range requests. Extracted members are cached in `out/ipsw/<build>/` and checked against the sha256 pins in `board.toml [ipsw.sha256]`.
+
+Member extraction prefetches up to 64 ranges of 8 MiB. Set `UNIXNU_IPSW_JOBS` to
+`1..64` to change concurrency; `1` disables prefetch. Interrupted ranges are retried
+before caching. Output shows extraction progress, speed and estimated remaining time.
 
 The image must match `[ipsw]`: product, version, build, device class, chip ID and board ID.
 
@@ -296,6 +324,14 @@ The kernel command line comes from `[payload] kernel_args`. An extra `--kernel-a
 `--owner-trust-cache` supplies an owner-signed bundle with the original caches and extra modules. It replaces `--trust-cache` and skips `[payload] trust_cache_sha256`.
 
 `--skip-setup` marks Setup as done in a copy of the Data seed supplied with `--data-ramdisk`.
+
+A macOS profile (`--os macos-27`) makes its Data seed from the system volume's
+`/System/Library/Templates/Data` with `scripts/make-macos-data-seed.py`. The template keeps its file
+owners, so the script runs as root. Files below `private/`, `Users/`, `Library/Preferences/` and
+`Library/Keychains/` are copied; every other template file becomes a symbolic link to its copy in the system
+volume's template, as macOS does for the paths of `Data.symlink-patterns`, so the seed fits the payload.
+Without a seed the build stops and prints the `sudo` command, with the output path `runtime/data.dbr`. Keep that seed for later builds. The kernel mounts it at
+`/System/Volumes/Data` and sets the firmlinks of the system volume's `/usr/share/firmlinks`.
 
 ### userdata
 

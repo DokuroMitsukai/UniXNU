@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import tomllib
+from urllib.parse import quote
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,7 +56,7 @@ def strings(value):
     return isinstance(value, list) and bool(value) and all(text(item) for item in value)
 
 
-def validate(record, board, label):
+def validate(record, board, label, allow_custom_components=False):
     need(record.get('schema_version') == 1, f'{label}: schema_version must be 1')
     info = record.get('device', {})
     for key in ('name', 'soc', 'os_profile', 'summary'):
@@ -72,8 +73,8 @@ def validate(record, board, label):
     pending = list(selected)
     while pending:
         component = pending.pop()
-        need(component in catalog, f'{label}: unknown component {component}')
-        for dependency in catalog[component].get('dependencies', []):
+        need(component in catalog or allow_custom_components, f'{label}: unknown component {component}')
+        for dependency in catalog.get(component, {}).get('dependencies', []):
             if dependency not in selected:
                 selected.add(dependency)
                 pending.append(dependency)
@@ -90,6 +91,7 @@ def validate(record, board, label):
                  f'{prefix}: paths must be repository-relative')
         components = area.get('components')
         need(isinstance(components, list) and all(text(c) for c in components), f'{prefix}: components must be a list')
+        need(all(re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]*', c) for c in components), f'{prefix}: invalid component ID')
         covered.update(components)
         evidence = area.get('evidence', [])
         need(isinstance(evidence, list), f'{prefix}: evidence must be a list')
@@ -99,7 +101,7 @@ def validate(record, board, label):
             ref = item['reference']
             need(ref.startswith('https://') or (not Path(ref).is_absolute() and '..' not in Path(ref).parts),
                  f'{prefix}: evidence must use HTTPS or a repository-relative path')
-            if item['kind'] in ('host', 'device'):
+            if item['kind'] in ('host', 'device') or item.get('command'):
                 need(text(item.get('command')), f'{prefix}: verification evidence needs a command')
                 need(re.fullmatch(r'[0-9a-f]{40}', item.get('revision', '')), f'{prefix}: verification evidence needs a commit')
         if area['status'] == 'implemented':
@@ -127,12 +129,32 @@ def check(device, base=None):
         previous = {a['id']: a for a in old.get('area', [])}
         current = {a['id']: a for a in record['area']}
         changed = git(device, 'diff', '--name-only', '--no-renames', base, 'HEAD').splitlines()
-        check_changes(previous, current, changed)
+        check_changes(previous, current, changed, device)
     print(f'{record["device"]["name"]}: {len(record["area"])} structured areas checked')
     return record
 
 
-def check_changes(previous, current, changed):
+def published_evidence_matches(device, area, paths):
+    if device is None:
+        return False
+    for item in area['evidence']:
+        revision = item.get('revision', '')
+        if item['kind'] not in ('host', 'device') or not re.fullmatch(r'[0-9a-f]{40}', revision):
+            continue
+        ancestor = subprocess.run(['git', '-C', str(device), 'merge-base', '--is-ancestor', revision, 'HEAD'],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if ancestor.returncode:
+            continue
+        same = subprocess.run(['git', '-C', str(device), 'diff', '--quiet', revision, 'HEAD', '--', *paths],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if same.returncode == 0:
+            return True
+    return False
+
+
+def check_changes(previous, current, changed, device=None):
+    source_paths = [path for path in changed if path != 'porting.toml' and not path.lower().endswith(('.md', '.rst'))]
+    covered = set()
     for path in changed:
         if path == 'porting.toml' or path.lower().endswith(('.md', '.rst')):
             continue
@@ -140,16 +162,28 @@ def check_changes(previous, current, changed):
             fnmatch.fnmatchcase(path, pattern) for pattern in area['paths'] + previous.get(key, {}).get('paths', []))}
         need(bool(owners), f'{path}: add its owner area and paths to porting.toml')
         for owner in owners:
+            if owner in covered:
+                continue
             before = previous.get(owner, {})
-            need(any(current[owner][key] != before.get(key) for key in ('findings', 'evidence')),
+            owned = [name for name in source_paths if any(fnmatch.fnmatchcase(name, pattern)
+                     for pattern in current[owner]['paths'] + before.get('paths', []))]
+            updated = any(current[owner][key] != before.get(key) for key in ('findings', 'evidence'))
+            need(updated or published_evidence_matches(device, current[owner], owned),
                  f'{path}: update {owner} findings or evidence with this change')
+            covered.add(owner)
+
+def markdown_text(value):
+    """Render record prose as text in Markdown and Vue templates."""
+    value = escape(value, quote=False).replace('{', '&#123;').replace('}', '&#125;')
+    return re.sub(r'([\\`*\[\]()#!|_~])', r'\\\1', value).replace('\n', ' ').rstrip()
+
 
 def render(record, repository, revision, zh=False):
     locale = int(zh)
     url = f'https://github.com/{repository}/blob/{revision}'
-    lines = [record['device']['summary'], '',
+    lines = ['<div v-pre>', '', markdown_text(record['device']['summary']), '',
              ('源记录' if zh else 'Source record') + f': [porting.toml]({url}/porting.toml), `{revision}`.', '',
-             ('本页按设备记录自动生成。记录正文使用英语。' if zh else 'This page is generated from the device record.'), '',
+             ('本页按设备记录自动生成。' if zh else 'This page is generated from the device record.'), '',
              '| ' + ('部分 | 状态' if zh else 'Area | Status') + ' |', '| --- | --- |']
     for area in record['area']:
         title = AREAS.get(area['id'], (area['id'], area['id']))[locale]
@@ -160,22 +194,31 @@ def render(record, repository, revision, zh=False):
         if area['components']:
             lines += [('组件' if zh else 'Components') + ': ' + ', '.join(f'`{c}`' for c in area['components']) + '.', '']
         for key, labels in FIELDS.items():
-            lines += [f'### {labels[locale]}', ''] + ['- ' + escape(entry, quote=False) for entry in area[key]] + ['']
+            lines += [f'### {labels[locale]}', ''] + ['- ' + markdown_text(entry) for entry in area[key]] + ['']
         lines += ['### ' + ('证据' if zh else 'Evidence'), '']
         for item in area['evidence']:
             ref = item['reference']
             link = ref if ref.startswith('https://') else f'{url}/{ref}'
-            lines += [f'- `{item["kind"]}`: [{item["result"]}]({link})']
+            link = quote(link, safe='/:?&=+%~@#')
+            lines += [f'- `{item["kind"]}`: [{markdown_text(item["result"])}]({link})']
             if item.get('command'):
-                lines += [f'  Command: `{item["command"]}`. Revision: `{item["revision"]}`.']
+                command = escape(item['command'], quote=False).replace('{', '&#123;').replace('}', '&#125;')
+                lines += [f'  Command: <code>{command}</code>. Revision: `{item["revision"]}`.']
         if not area['evidence']:
             lines += [('按下一步操作收集证据。' if zh else 'Collect evidence using the next action.')]
-    return '\n'.join(lines) + '\n'
+    return '\n'.join(lines + ['', '</div>']) + '\n'
 
 
 def site(overrides):
     local = dict(value.split('=', 1) for value in overrides)
     registry = tomllib.loads((ROOT / 'devices.toml').read_text())
+    if registry.get('schema_version') == 2:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('device_catalog', ROOT / 'scripts/sync-devices.py')
+        catalog = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(catalog)
+        catalog.render_site(registry, local)
+        return
     need(registry.get('schema_version') == 1, 'device registry schema_version must be 1')
     names = [entry['name'] for entry in registry.get('device', [])]
     need(len(names) == len(set(names)), 'duplicate registered device')

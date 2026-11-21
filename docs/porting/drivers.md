@@ -20,7 +20,7 @@ map below. For each selected implementation, write down:
 Use the target DTS, firmware and driver sources for hardware values. Record their
 file and revision beside the configuration. Keep SoC operations in shared support,
 board wiring/policy in the device repository and OS ABI bindings in the selected
-OS integration. The sheng sources linked in these guides are implementation examples.
+OS integration. The device sources linked in these guides are implementation examples.
 
 From the main checkout, resolve the target:
 
@@ -42,12 +42,16 @@ Use the reported target tree for low-level build commands. Components are under
 | 4 | Touch and physical buttons | [Input](/porting/input) | QcomGeniSpi, ShengNovatekTouch, ShengHidInput, ButtonProbe |
 | 5 | GPU and Metal | [GPU](/porting/gpu) | Adreno740, AdrenoMetal, Sm8550Platform, AdrenoFirmware, AdrenoPM4, AirNir |
 | 6 | Wi-Fi | [Network](/porting/network) | Ath12kWifi, WifiProbe, WifiNet, MhiBoot |
+| 6 | Bluetooth | [Bluetooth](/porting/bluetooth) | Linux initialization, GENI DMA, UART.SK, BlueTool |
+| 6 | USB | [USB](/porting/usb) | AppleUSBXDCI, AppleUSBXHCI, UCSI, eUSB2, QMP PHY |
+| 6a | Baseband and cellular, when fitted | [Baseband](/porting/baseband) | QcomBaseband, modem boot, QRTR, IPA/GSI |
 | 7 | DSP, audio, battery, CPU frequency, platform power | [DSP and power](/porting/power) | AdspProbe, AudioProbe, ShengBattery, CpuFreqProbe, ShengPlatformPower |
 | 8 | OS services and packaging | [OS integration](/porting/platform#block-and-os-services) and [firmware](/porting/uefi-firmware) | SoftwareAES, AppleKeyStoreState, XnuPrelink, DarwinBoot, ShengPreflight |
 
 Each guide links the interfaces and reference implementations to inspect.
 Implement controller, power and DMA operations for the target hardware, then
 qualify private ABI bindings against the selected OS kernelcache.
+For macOS, add the [macOS adaptations](/porting/macos#drivers).
 
 ## 3. Connect initialization, ABI and build inputs {#build-integration}
 
@@ -59,11 +63,11 @@ Read these working integration references:
 | [build-gop-legacy-display.py](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/scripts/build-gop-legacy-display.py#L253) | Kernel compile-record reuse, source objects, ABI inputs and archive creation |
 | [LegacyDisplayProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/LegacyDisplayProbe.cpp#L493) | `native_legacy_display_late_probe`: board initialization calls and dependency order |
 | [BatteryProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/BatteryProbe.cpp#L16) | `OSMetaClass::preModLoad/postModLoad` around a late class initializer |
-| [Built-in driver example](/drivers/xnu-drivers#driver-class) | `IOService` lifecycle, provider matching and archive/link setup |
+| [Driver class example](/porting/driver-development#driver-class) | `IOService` lifecycle, provider matching and archive/link setup |
 
 1. **Choose the startup path.** A provider-matched service needs a personality,
    `probe/start` and the provider properties described in
-   [matching](/drivers/device-tree-matching). A board-started service needs an
+   [matching](/porting/driver-development#matching). A board-started service needs an
    explicit caller after its resources and OS dependencies exist. Keep class
    initialization consistent with the selected build's normal or late registration.
 2. **Complete resource cleanup.** Pair each mapping, interrupt, work-loop source,
@@ -71,7 +75,7 @@ Read these working integration references:
    Stop new requests, cancel/drain outstanding work, then release those resources
    on initialization failure, detach and reset.
 3. **Compile for the selected OS.** Use that kernel's generated headers and compile
-   records as described in [XNU drivers](/drivers/xnu-drivers#compile-against-the-kernel-abi).
+   records as described in [compile against the kernel ABI](/porting/driver-development#compile-against-the-kernel-abi).
    For private interfaces, record the class layout, virtual-method slots, selectors,
    argument structures and symbol bindings against the selected kernelcache.
    Supply the candidate/audit files required by the chosen recipe through
@@ -85,7 +89,7 @@ Read these working integration references:
    `[components] include` list. Place `component:<ID>` or the device script command
    in `[kernel] archives` in dependency order. With archive builds, enable
    `CONFIG_XNU_BUILD_ARCHIVES=y`. Set the consumed driver flags/archive paths and
-   [link inputs](/drivers/xnu-drivers#link-into-the-kernel). Trace a new flag through
+   [link inputs](/porting/driver-development#link-into-the-kernel). Trace a new flag through
    the build scripts and its initialization caller.
 6. **Check the resolved inputs.** Run `./unixnu status --json` from the main checkout.
    Confirm source revisions, dependency order and the archive path. Run

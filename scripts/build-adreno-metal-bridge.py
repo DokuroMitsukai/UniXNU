@@ -1,64 +1,82 @@
 #!/usr/bin/env python3
 """Build the native Metal bridge (drivers/AdrenoMetal/bridge/NativeMetalBridge.rs): the pinned metal2vulkan runtime behind a C ABI, as a static library.
 
---target ios (default) cross-builds for arm64-apple-ios17.0, --target host for the macOS host simulation. The runtime's own example library
+--target ios (default) cross-builds for arm64-apple-ios17.0, --target ios27 for arm64e-apple-ios27.0 and --target macos27 for arm64e-apple-macos27.0 (nightly, std built from source), --target host for the macOS host simulation. The runtime's own example library
 (runtime_examples.ll) and its function-constant fixture are assembled to AIR with llvm-as and embedded for the self-tests. Only generated build files hold local paths; nothing here
 is committed. Output: build/adreno-metal-bridge/<target>/libadreno_metal_bridge.a"""
 import argparse
 import hashlib
 import json
 import os
-import re
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PIN = json.loads((ROOT / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text())['translator']['commit']
 SOURCE = ROOT / '.cache/gpu-reference/metal2vulkan'
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--target', choices=['ios', 'host'], default='ios')
+parser.add_argument('--target', choices=['ios', 'ios27', 'macos27', 'host'], default='ios')
+parser.add_argument('--source', type=Path, default=SOURCE, help='Use an exact pinned translator checkout and reuse its Cargo cache')
 parser.add_argument('--manifest-only', action='store_true',
                     help='write build/adreno-metal-bridge/Cargo.toml (patched source, fixtures) and stop before cargo, for `cargo fetch`')
+parser.add_argument('--reuse-current', action='store_true', help='reuse the existing archive when its target and complete bridge sources match')
+parser.add_argument('--check-runtime-draws', action='store_true', help='enable the runtime draw-state comparison assertions')
 args = parser.parse_args()
+SOURCE = args.source.resolve()
 if subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text=True).strip() != PIN:
     raise SystemExit('Translator revision differs from the qualified source pin')
 PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
-    '0001-optional-constant-output-members.patch', '0002-resource-wait-storage-dependencies.patch',
-    '0003-cache-device-entry-point-priming.patch', '0004-fold-constant-global-field-loads.patch',
-    '0005-keep-module-decodes-and-profile-fingerprints.patch', '0006-skip-draws-without-a-pipeline.patch',
-    '0007-accept-two-plane-rgb-surfaces.patch', '0008-alias-padded-rows-of-written-textures.patch']]
-tree_diff = subprocess.check_output(['git', '-C', str(SOURCE), 'diff', 'HEAD', '--'], text=True)
-def canonical_diff(diff):
-    # Independent patches touch disjoint files; Git orders the combined diff by
-    # filename, rather than by the order the patches were applied.
-    blocks = [block for block in re.split(r'(?=^diff --git )', diff, flags=re.M) if block]
-    names = [block.splitlines()[0] for block in blocks]
-    if len(set(names)) != len(names):
-        raise SystemExit('Overlapping recorded patches require an explicit combined-source update')
-    return ''.join(sorted(blocks, key=lambda block: block.splitlines()[0]))
+    '0063-main-optimizations-on-development-46e7cc96.patch',
+    '0064-copies-leave-unreachable-pages-alone.patch']]
 
 
-expected = ''
-states = [expected]
-for patch in PATCHES:
-    expected += patch.read_text()
-    states.append(canonical_diff(expected))
-if tree_diff not in states:
+def git_tree(*steps):
+    # The source tree a scratch index holds after HEAD and the given commands, without touching the source's own index.
+    index = ROOT / 'build/adreno-metal-bridge-index'
+    index.parent.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ, GIT_INDEX_FILE=str(index))
+    subprocess.run(['git', '-C', str(SOURCE), 'read-tree', 'HEAD'], env=env, check=True)
+    for step in steps:
+        subprocess.run(['git', '-C', str(SOURCE)] + step, env=env, check=True)
+    tree = subprocess.check_output(['git', '-C', str(SOURCE), 'write-tree'], env=env, text=True).strip()
+    index.unlink()
+    return tree
+
+
+# The tree after each prefix of the recorded patches; the source must be one of them.
+states = [git_tree(*[['apply', '--cached', str(patch)] for patch in PATCHES[:count]]) for count in range(len(PATCHES) + 1)]
+current = git_tree(['add', '-A'])
+if current not in states:
     raise SystemExit('Translator source differs from the pinned revision plus its recorded patches')
-for patch in PATCHES[states.index(tree_diff):]:
+for patch in PATCHES[states.index(current):]:
     subprocess.run(['git', '-C', str(SOURCE), 'apply', str(patch)], check=True)
-if subprocess.check_output(['git', '-C', str(SOURCE), 'diff', 'HEAD', '--'], text=True) != canonical_diff(expected):
+if git_tree(['add', '-A']) != states[-1]:
     raise SystemExit('Translator patch result differs from its exact recorded source')
 out = ROOT / 'build/adreno-metal-bridge'
 out.mkdir(parents=True, exist_ok=True)
 llvm_as = next((p for p in ['/opt/homebrew/opt/llvm/bin/llvm-as', shutil.which('llvm-as') or ''] if p and Path(p).exists()), None)
 if not llvm_as:
     raise SystemExit('llvm-as (LLVM 21 or newer) is required to assemble the fixture')
+def assemble_fixture(source, target):
+    # Preserve an unchanged include_bytes input so a frontend relink keeps its Rust archive.
+    with tempfile.NamedTemporaryFile(dir=target.parent, suffix='.air', delete=False) as stream:
+        temporary = Path(stream.name)
+    try:
+        subprocess.run([llvm_as, '-o', temporary, source], check=True)
+        if not target.is_file() or temporary.read_bytes() != target.read_bytes():
+            os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
 air = out / 'runtime_examples.air'
-subprocess.run([llvm_as, '-o', air, SOURCE / 'crates/metal2vulkan-validation/fixtures/public/examples/runtime_examples.ll'], check=True)
+assemble_fixture(SOURCE / 'crates/metal2vulkan-validation/fixtures/public/examples/runtime_examples.ll', air)
 fc_air = out / 'function_constant.air'
-subprocess.run([llvm_as, '-o', fc_air, SOURCE / 'crates/metal2vulkan-validation/fixtures/public/kernel_function_constant_gate_fold.ll'], check=True)
+assemble_fixture(SOURCE / 'crates/metal2vulkan-validation/fixtures/public/kernel_function_constant_gate_fold.ll', fc_air)
+# The GPU scanout's half-float conversion kernel (GpuScanoutPresenter.h), hand-written AIR.
+scanout_air = out / 'scanout_convert.air'
+assemble_fixture(ROOT / 'drivers/AdrenoMetal/shaders/scanout_convert.ll', scanout_air)
 manifest = out / 'Cargo.toml'
 manifest.write_text('\n'.join([
     '[package]', 'name = "adreno-metal-bridge"', 'version = "0.1.0"', 'edition = "2024"', 'rust-version = "1.98"', '[workspace]',
@@ -70,25 +88,82 @@ manifest.write_text('\n'.join([
     # The runtime hashes every shader-cache key and entry; without asm, sha2 0.10 on aarch64 is the portable software rounds, not the
     # ARMv8 SHA-256 instructions every target CPU has (cpufeatures answers sha2 true on Apple platforms).
     'sha2 = { version = "0.10", features = ["asm"] }',
-    '[profile.release]', 'panic = "unwind"', 'debug = 1', '',
+    # The render server's display thread spends most of a frame in the runtime, much of it in small functions across the
+    # translator's crates: one optimisation unit with link-time optimisation lets them inline across crate boundaries.
+    '[profile.release]', 'panic = "unwind"', 'debug = 1', 'lto = "fat"', 'codegen-units = 1', '',
+    *(['[profile.release.package.metal2vulkan-runtime]', 'debug-assertions = true', ''] if args.check_runtime_draws else []),
 ]))
 if args.manifest_only:
     print(manifest)
     raise SystemExit(0)
-triple = 'aarch64-apple-ios' if args.target == 'ios' else 'aarch64-apple-darwin'
+triple = {'ios': 'aarch64-apple-ios', 'ios27': 'arm64e-apple-ios', 'macos27': 'arm64e-apple-darwin', 'host': 'aarch64-apple-darwin'}[args.target]
+ARM64E = args.target in ('ios27', 'macos27')
+# arm64e has no prebuilt std: it is built from rust-src (RUSTC_BOOTSTRAP for -Z); the iPadOS 27 processes that load the plugin are arm64e.
+cargo_path = shutil.which('cargo') or str(Path(os.environ.get('CARGO_HOME', Path.home() / '.cargo')) / 'bin/cargo')
+if not Path(cargo_path).is_file():
+    raise SystemExit('Cargo is required: install Rust 1.98.0 with rust-src through rustup')
+cargo = [cargo_path, '+1.98.0'] + (['-Z', 'build-std=std,panic_unwind'] if ARM64E else [])
 # The translator source the runtime is built from (its pin and recorded patches), which keys the shader cache: shader priming keeps what it
 # finished while this stays the same (PrimeShaders.h).
-runtime_id = hashlib.sha256((PIN + '\n' + canonical_diff(expected)).encode()).hexdigest()[:32]
-env = dict(os.environ, NMB_RUNTIME_ID=runtime_id, NMB_FIXTURE_AIR=str(air), NMB_FC_AIR=str(fc_air), IPHONEOS_DEPLOYMENT_TARGET='17.0', MACOSX_DEPLOYMENT_TARGET='14.0')
+runtime_input = PIN + '\n' + states[-1] + ('\nchecked-draws' if args.check_runtime_draws else '')
+runtime_id = hashlib.sha256(runtime_input.encode()).hexdigest()[:32]
+component_id = subprocess.check_output(['git', '-C', str(ROOT / 'drivers/AdrenoMetal'), 'rev-parse', 'HEAD'], text=True).strip()
+identity = dict(target=args.target, translator=PIN, source_tree=states[-1], component=component_id,
+                runtime=runtime_id,
+                manifest=hashlib.sha256(manifest.read_text().replace(str(SOURCE), '<translator>').replace(str(ROOT), '<tree>').encode()).hexdigest(),
+                inputs={name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in {
+                    'bridge': ROOT / 'drivers/AdrenoMetal/bridge/NativeMetalBridge.rs',
+                    'runtime_examples': SOURCE / 'crates/metal2vulkan-validation/fixtures/public/examples/runtime_examples.ll',
+                    'function_constant': SOURCE / 'crates/metal2vulkan-validation/fixtures/public/kernel_function_constant_gate_fold.ll',
+                    'scanout': ROOT / 'drivers/AdrenoMetal/shaders/scanout_convert.ll'}.items()})
+final = out / args.target / 'libadreno_metal_bridge.a'
+final.parent.mkdir(exist_ok=True)
+prebuilt = os.environ.get('NMB_PREBUILT_BRIDGE')
+if prebuilt:
+    metadata = Path(prebuilt).resolve()
+    record = json.loads(metadata.read_text())
+    archive = metadata.parent / 'libadreno_metal_bridge.a'
+    with archive.open('rb') as stream:
+        digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+    if record.get('identity') != identity or record.get('sha256') != digest:
+        raise SystemExit('Prebuilt Metal bridge differs from the selected target or source identity')
+    if archive != final.resolve():
+        shutil.copyfile(archive, final)
+    final.with_suffix('.a.json').write_text(json.dumps(record, indent=2) + '\n')
+    (out / ('build-%s.log' % args.target)).write_text('Reused the prebuilt archive with matching source and target identity.\n'
+                                                  + json.dumps(record, indent=2) + '\n')
+    print('PASS: qualified prebuilt Metal bridge for %s; runtime %s' % (args.target, runtime_id))
+    raise SystemExit(0)
+if args.reuse_current and final.is_file() and final.with_suffix('.a.json').is_file():
+    record = json.loads(final.with_suffix('.a.json').read_text())
+    previous = record.get('identity', {})
+    comparable = lambda value: {key: item for key, item in value.items() if key != 'component'}
+    def bridge_tree(revision):
+        result = subprocess.run(['git', '-C', str(ROOT / 'drivers/AdrenoMetal'), 'rev-parse', revision + ':bridge'],
+                                capture_output=True, text=True)
+        return result.stdout.strip() if result.returncode == 0 else None
+    old_tree = bridge_tree(previous.get('component', ''))
+    clean = subprocess.run(['git', '-C', str(ROOT / 'drivers/AdrenoMetal'), 'diff', '--quiet', 'HEAD', '--', 'bridge']).returncode == 0
+    if old_tree and old_tree == bridge_tree(component_id) and clean and comparable(previous) == comparable(identity):
+        with final.open('rb') as stream:
+            digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+        if digest == record.get('sha256'):
+            print('PASS: reused unchanged %s Rust bridge from component %s; frontend component %s' %
+                  (args.target, previous['component'], component_id))
+            raise SystemExit(0)
+env = dict(os.environ, NMB_COMPONENT_ID=component_id, NMB_RUNTIME_ID=runtime_id, NMB_FIXTURE_AIR=str(air), NMB_FC_AIR=str(fc_air), NMB_SCANOUT_AIR=str(scanout_air), IPHONEOS_DEPLOYMENT_TARGET='27.0' if args.target == 'ios27' else '17.0', MACOSX_DEPLOYMENT_TARGET='27.0' if args.target == 'macos27' else '14.0')
+if ARM64E:
+    env['RUSTC_BOOTSTRAP'] = '1'
 target_dir = ROOT / 'build/m2v-target'
 log = out / ('build-%s.log' % args.target)
 with log.open('w') as stream:
-    result = subprocess.run(['cargo', '+1.98.0', 'build', '--release', '--manifest-path', manifest, '--target', triple,
-                             '--target-dir', target_dir], env=env, stdout=stream, stderr=subprocess.STDOUT, timeout=1800)
+    result = subprocess.run(cargo + ['build', '--release', '--manifest-path', manifest, '--target', triple,
+                             '--target-dir', target_dir], env=env, stdout=stream, stderr=subprocess.STDOUT, timeout=7200)
 if result.returncode:
     raise SystemExit(log.read_text()[-6000:])
 library = target_dir / triple / 'release/libadreno_metal_bridge.a'
-final = out / args.target / 'libadreno_metal_bridge.a'
-final.parent.mkdir(exist_ok=True)
 shutil.copyfile(library, final)
+with final.open('rb') as stream:
+    digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+final.with_suffix('.a.json').write_text(json.dumps(dict(identity=identity, sha256=digest), indent=2) + '\n')
 print('PASS: native Metal bridge static library for %s (%d bytes); translator %s' % (args.target, final.stat().st_size, PIN[:12]))

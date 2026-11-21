@@ -14,6 +14,29 @@
 5. 继续[构建 package、固件和 payload](/zh/building)。
 
 
+## 使用导出输入在本机构建
+
+sheng macOS lab 的 `export_build_inputs=true` 导出 XNU 目标文件、内核头文件、iPhoneOS SDK 和 Xcode 26.6 编译工具。解压 `compiler-toolchain.tar.zst`，得到包含 `bin` 和 `lib` 的 `TOOLCHAIN`。将缓存解压到选定构建树，修正路径后在本机编译：
+
+```sh
+python3 scripts/relocate-xnu-cache.py TREE --metadata build-paths.json --sdk SDK --device DEVICE --toolchain TOOLCHAIN
+./unixnu build kernel -D DEVICE --os macos-27 --data-ramdisk SEED \
+  --kernel-sdk SDK --kernel-tools TOOLCHAIN/bin
+```
+
+导出任务收集工具依赖的非系统动态库，运行导出目录中的编译器、IIG 和链接器，用导出的编译器生成 arm64e 对象，再通过 classic 链接器执行部分链接。本地运行器在工具查找和执行时均选择导出的 SDK、编译器、链接器和内核工具。`build-paths.json` 记录编译器与 Xcode 版本。组件归档按当前源码重新编译，内核复用保留的 XNU 目标文件。重新准备源码树时，内容相同的补丁后源码和恢复头文件保留时间戳。
+
+`SEED` 是现有启动 payload 中保留的 Data seed。仅构建内核时也会读取其 APFS UUID，将编译后的 Data 查找绑定到该安装。
+
+完整打包入口使用相同的内核工具选择：
+
+```sh
+../UniXNU-sheng/scripts/package.sh --os macos-27 --data-ramdisk SEED \
+  --uefi UEFI --kernel-sdk SDK --kernel-tools TOOLCHAIN/bin
+```
+
+导出工具用于内核编译与预链接。运行时库和 GPU 工具使用主机的 macOS SDK，固件使用配置的 LLVM 工具链。将 `kernel_sdk` 和 `kernel_tools` 写入 `unixnu.local.toml` 可复用这些路径。`scripts/run-local-kernel.py` 将 `--sdk` 和 `--tools` 转交给相同构建入口。
+
 ## 源码与构建树
 
 | 路径 | 内容 |
@@ -58,7 +81,7 @@ ARM64_PLKSEG_ADDR=0xfffffff004004000
 DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=17.0 -DXNU_TARGET_OS_IOS"
 ```
 
-`BCM2837` 携带 4 KiB 页布局。内核仍以 iOS 17 为目标，以匹配 iPadOS kernelcache 的预链接 ABI。
+`BCM2837` 携带 4 KiB 页布局。arm64 内核以 iOS 17 为目标，以匹配 iOS 16 或 iPadOS 17 kernelcache 的预链接 ABI；两个 arm64 目标使用同一套 arm64 补丁系列。
 
 ## defconfig 开关
 
@@ -93,7 +116,7 @@ DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=17.0 -DXNU_TARGET_OS_IOS"
 
 ```toml
 [kernel]
-defconfig = "sheng_defconfig"
+defconfig = "myboard_defconfig"
 archives = [
   "build-software-aes-bindings.py",
   "build-libpthread-kernel.py",

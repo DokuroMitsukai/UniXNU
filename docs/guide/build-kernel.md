@@ -17,6 +17,29 @@ The kernel step builds Apple's XNU source with UniXNU patches, then prelinks the
 5. Continue with [package, firmware and payload](/building#build-artifacts).
 
 
+## Local builds with exported inputs
+
+The sheng macOS lab exports its cached XNU objects, kernel headers, iPhoneOS SDK and Xcode 26.6 compiler tools with `export_build_inputs=true`. Extract `compiler-toolchain.tar.zst` to obtain `TOOLCHAIN`, containing `bin` and `lib`. Extract the cache into the selected resolved tree, then relocate its paths and build locally:
+
+```sh
+python3 scripts/relocate-xnu-cache.py TREE --metadata build-paths.json --sdk SDK --device DEVICE --toolchain TOOLCHAIN
+./unixnu build kernel -D DEVICE --os macos-27 --data-ramdisk SEED \
+  --kernel-sdk SDK --kernel-tools TOOLCHAIN/bin
+```
+
+The export collects each tool's non-system dynamic library dependencies and runs the staged compiler, IIG and linker. It uses the exported compiler to generate an arm64e object, then partially links it with the packaged classic linker. The local runner selects the exported SDK, compiler, linker and kernel tools for both tool discovery and execution. `build-paths.json` records the compiler and Xcode versions. Component archives rebuild from current sources and the kernel uses the retained XNU objects. Unchanged patched sources and restored headers retain their timestamps when the source tree is prepared again.
+
+`SEED` is the preserved Data seed from the installed boot payload. The kernel-only build reads its APFS UUID and binds the compiled Data lookup to that installation.
+
+The same tool selection works with the full packaging entry:
+
+```sh
+../UniXNU-sheng/scripts/package.sh --os macos-27 --data-ramdisk SEED \
+  --uefi UEFI --kernel-sdk SDK --kernel-tools TOOLCHAIN/bin
+```
+
+The exported tools apply to kernel compilation and prelink. Runtime libraries and GPU tools use the host macOS SDK; firmware uses its configured LLVM toolchain. Save `kernel_sdk` and `kernel_tools` in `unixnu.local.toml` to reuse these paths. `scripts/run-local-kernel.py` forwards its `--sdk` and `--tools` options to the same build entry.
+
 ## Source and tree
 
 | Path | Contents |
@@ -61,7 +84,7 @@ ARM64_PLKSEG_ADDR=0xfffffff004004000
 DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=17.0 -DXNU_TARGET_OS_IOS"
 ```
 
-`BCM2837` is the XNU machine configuration that carries the 4 KiB page layout. The kernel still targets iOS 17 so the prelink ABI matches the iPadOS kernelcache.
+`BCM2837` selects the 4 KiB page layout. The OS profile selects the architecture, deployment version and ABI. macOS 27 uses arm64e, a 27.0 deployment target and `-DXNU_TARGET_OS_OSX`; prelink uses the selected macOS kernelcache.
 
 ## Defconfig flags
 
@@ -96,7 +119,7 @@ Each `CONFIG_XNU_<NAME>` line becomes `XNU_<NAME>` in the kernel build environme
 
 ```toml
 [kernel]
-defconfig = "sheng_defconfig"
+defconfig = "myboard_defconfig"
 archives = [
   "build-software-aes-bindings.py",
   "build-libpthread-kernel.py",

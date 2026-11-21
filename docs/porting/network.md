@@ -1,7 +1,7 @@
 # Wi-Fi adaptation
 
 Start with [platform interrupts and DMA](/porting/platform). Identify the actual
-radio, PCI ID, firmware and board-data variant. Read [Ath12kWifi](/drivers/ath12k-wifi)
+radio, PCI ID, firmware and board-data variant. Read `Ath12kWifi`
 and its `include/nw_abi.h` before implementing callbacks.
 
 Use [driver build integration](/porting/drivers#build-integration) to connect
@@ -10,7 +10,7 @@ initialization, archive recipes and the OS ABI, then run this page's hardware ch
 ## Sources and interfaces {#source-map}
 
 These links identify reviewed source revisions. Match interfaces to the selected
-SoC, component and OS versions. Files in `UniXNU-sheng` provide board integration
+SoC, component and OS versions. The linked device sources provide board integration
 examples.
 
 | Implementation | Source | What to read and implement |
@@ -24,7 +24,7 @@ examples.
 
 
 Read the [board sources](https://github.com/UniXNU/UniXNU-sheng/tree/main/package).
-sheng uses WCN7850 on SM8550 PCIe0. The component also contains QCC2072 and
+The reference connects WCN7850 to SM8550 PCIe0. The component also contains QCC2072 and
 QCN9274 definitions. Match the endpoint's hardware revision and firmware support
 in the driver before selecting a device definition.
 
@@ -32,7 +32,7 @@ in the driver before selecting a device definition.
 
 Record controller/PHY windows, lane count, reset sequence, WLAN enable, PERST,
 reference clock, regulators, interconnect votes, SMMU streams and MSI routing.
-On sheng these are C++ constants and tables in the board package.
+The reference stores these as C++ constants and tables in the board package.
 
 1. Inspect powered and clocked register state.
 2. Apply the board's rails, clocks, PHY configuration and reset sequence.
@@ -44,7 +44,7 @@ On sheng these are C++ constants and tables in the board package.
 6. Attach MSI and confirm delivery before relying on interrupt-driven progress.
 
 **Expected result:** the correct endpoint, readable BAR, usable DMA and delivered
-interrupts. sheng's probe stages are selected by `sheng-wifi`; stage 1 inspects
+interrupts. The reference probe uses `wifi` to select stages; stage 1 inspects
 handoff state, stage 2 starts the link and stage 4 inspects the endpoint.
 The current endpoint path enters the reusable stack at stage 5 or higher; that
 stack performs its MHI and firmware startup. Read the stage's
@@ -56,7 +56,7 @@ Implement `lx_platform` from `nw_abi.h`: time, sleep, polling, logging, allocati
 DMA allocation/mapping/synchronization and `fw_get`. Implement `nw_board`: mapped
 BAR, PCI identity, config-space access and MSI target.
 
-The sheng implementation uses `native_ufs_extra_*` for its DMA arena and
+The reference implementation uses `native_ufs_extra_*` for its DMA arena and
 `native_ufs_part_*` for firmware access. A port with another storage or DMA
 implementation must supply equivalent board services. Record firmware filenames,
 board data and calibration provenance in `proprietary-files.txt`.
@@ -84,7 +84,7 @@ Adapt `WifiNet.cpp` to the selected XNU and wireless-framework ABI. Connect
 Provide the device MAC identity, channel/regulatory data and request layouts
 required by the selected userland.
 
-Select Ath12kWifi in the complete component list. sheng builds its objects through
+Select Ath12kWifi in the complete component list. The reference builds its objects through
 `build-ath12k-wifi.py`, called by `build-gop-legacy-display.py`, which also links
 `WifiProbe.cpp` and `WifiNet.cpp`. Inspect the assembled target tree:
 
@@ -99,7 +99,23 @@ Rebuild the kernel, payload and boot image using [Building](/building).
 receive and transmit each succeed. Record access-point settings, firmware,
 reconnect behavior and sustained traffic separately in the network record.
 
+## WCN7850 reference {#sheng}
+
+The reference joins WPA2-Personal networks, gets an address by DHCP and loads web pages.
+`wifi=5` starts Wi-Fi; `wifi-aj=0` leaves the join to Settings.
+
+| Area | Finding |
+| --- | --- |
+| Power | Each of the six PMU rails needs RPMh mode, voltage and enable requests. Without the mode request two rails stay off and the link never trains. |
+| PCIe | PCIe0 trains at Gen2 x1; the endpoint reads `17cb:1107`. |
+| Interrupts | The chip's MSIs go through PCIe0's own MSI receiver to SPI 141, so the worker sleeps between interrupts. |
+| Firmware | c7-00108 runs; c2-00259 hangs in its demand pager. The firmware reports a zero MAC, so the board makes one from the chip ID. |
+| Scan | 6 GHz is left out: its 59 passive channels would take most of the scan time. |
+| Association | The peer entry uses the access point's own HT and VHT capability, not this radio's. Join and the four-way handshake take about 100 ms. |
+| Link | A firmware beacon miss is ignored while frames still arrive within 5 s. Frames at VHT MCS 10 and 11 are dropped. |
+| System | The system cannot store the network password, so it does not treat the network as known. |
+
 ## Next step
 
-Continue with [DSP, audio and power](/porting/power), or return to the
+Continue with [Bluetooth](/porting/bluetooth). Return to the
 [driver checklist](/porting/drivers).

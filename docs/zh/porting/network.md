@@ -1,7 +1,7 @@
 # Wi-Fi 适配
 
 先完成[平台中断和 DMA](/zh/porting/platform)。确认无线芯片、PCI ID、固件和 board-data 变体。
-实现回调前阅读 [Ath12kWifi](/zh/drivers/ath12k-wifi)和 `include/nw_abi.h`。
+实现回调前阅读 `Ath12kWifi`和 `include/nw_abi.h`。
 
 实现后按[驱动接入步骤](/zh/porting/drivers#build-integration)连接初始化调用、归档配方和 OS ABI，
 再执行本页对应的硬件验证。
@@ -9,7 +9,7 @@
 ## 源码与接口 {#source-map}
 
 以下链接固定到已核对的源码版本。使用所选 SoC、组件和 OS 版本核对接口；
-`UniXNU-sheng` 中的文件提供板级集成示例。
+链接的设备源码提供板级集成示例。
 
 | 实现部分 | 源码 | 阅读与实现内容 |
 | --- | --- | --- |
@@ -22,13 +22,13 @@
 
 
 阅读[板级源码](https://github.com/UniXNU/UniXNU-sheng/tree/main/package)。
-sheng 的 WCN7850 位于 SM8550 PCIe0。组件还包含 QCC2072 和 QCN9274 定义。
+参考实现将 WCN7850 接到 SM8550 PCIe0。组件还包含 QCC2072 和 QCN9274 定义。
 选择定义前，核对驱动中的端点硬件版本和固件支持。
 
 ## 2. 启动 PCIe 端点
 
 记录控制器与 PHY 地址窗口、通道数、复位顺序、WLAN enable、PERST、参考时钟、稳压器、
-互连投票、SMMU stream 和 MSI 路由。sheng 使用板级 package 中的 C++ 常量和表。
+互连投票、SMMU stream 和 MSI 路由。参考实现在板级 package 中使用 C++ 常量和表。
 
 1. 检查已供电、已启用时钟的寄存器状态。
 2. 执行目标板的电源、时钟、PHY 配置和复位顺序。
@@ -37,7 +37,7 @@ sheng 的 WCN7850 位于 SM8550 PCIe0。组件还包含 QCC2072 和 QCN9274 定�
 5. 建立端点 DMA 范围，确认分配缓冲区在选定缓存策略下可达。
 6. 接入 MSI 并确认中断到达，再依赖中断推进驱动。
 
-**预期结果：** 端点正确、BAR 可读、DMA 可用且中断到达。sheng 用 `sheng-wifi` 选择阶段：
+**预期结果：** 端点正确、BAR 可读、DMA 可用且中断到达。参考探针用 `wifi` 选择阶段：
 1 检查交接状态，2 启动链路，4 检查端点。当前端点路径在阶段 5 及以上进入可复用协议栈，由协议栈执行 MHI 和固件启动。
 在新设备启用前阅读对应阶段源码。
 
@@ -46,7 +46,7 @@ sheng 的 WCN7850 位于 SM8550 PCIe0。组件还包含 QCC2072 和 QCN9274 定�
 按 `nw_abi.h` 实现 `lx_platform` 的时间、休眠、轮询、日志、内存分配、DMA 分配/映射/同步
 和 `fw_get`；实现 `nw_board` 的 BAR、PCI 身份、配置空间访问和 MSI 目标。
 
-sheng 使用 `native_ufs_extra_*` 提供 DMA 内存区，使用 `native_ufs_part_*` 读取固件。
+参考实现使用 `native_ufs_extra_*` 提供 DMA 内存区，使用 `native_ufs_part_*` 读取固件。
 采用其他存储或 DMA 实现的移植，需要提供等效板级服务。
 在 `proprietary-files.txt` 中记录固件文件名、board data 和校准数据来源。
 
@@ -67,7 +67,7 @@ sheng 使用 `native_ufs_extra_*` 提供 DMA 内存区，使用 `native_ufs_part
 按选定 XNU 和无线框架 ABI 适配 `WifiNet.cpp`，将 `nw_wifi_scan`、`nw_wifi_connect`、
 `nw_wifi_tx` 以及接收和链路事件接入 OS。提供该 userland 所需的 MAC 身份、信道/监管数据和请求布局。
 
-在完整组件列表中选择 Ath12kWifi。sheng 由 `build-gop-legacy-display.py` 调用
+在完整组件列表中选择 Ath12kWifi。参考实现由 `build-gop-legacy-display.py` 调用
 `build-ath12k-wifi.py` 构建组件，并链接 `WifiProbe.cpp` 与 `WifiNet.cpp`。
 在组装后的构建树检查：
 
@@ -81,6 +81,22 @@ rg -n 'nativewifi|wifi_module_objs|WifiNet|WifiProbe' scripts/build-gop-legacy-d
 **预期结果：** 扫描、认证、关联、地址配置、接收和发送分别成功。
 在网络记录中写明接入点配置、固件、重连行为和持续传输结果。
 
+## WCN7850 参考实现 {#sheng}
+
+参考实现能加入 WPA2-Personal 网络，通过 DHCP 获得地址并加载网页。
+`wifi=5` 启动 Wi-Fi；`wifi-aj=0` 让设置应用负责加入网络。
+
+| 方面 | 结论 |
+| --- | --- |
+| 供电 | 六路 PMU 电源都需要 RPMh 的模式、电压和使能请求。缺少模式请求时有两路不上电，链路无法训练。 |
+| PCIe | PCIe0 训练到 Gen2 x1；端点 ID 为 `17cb:1107`。 |
+| 中断 | 芯片的 MSI 经 PCIe0 自己的 MSI 接收器送到 SPI 141，工作线程在中断之间睡眠。 |
+| 固件 | c7-00108 可以运行；c2-00259 卡在按需分页器中。固件报告的 MAC 为零，由板级用芯片 ID 生成。 |
+| 扫描 | 不扫描 6 GHz：其 59 个被动信道会占用大部分扫描时间。 |
+| 关联 | 对端条目使用接入点自己的 HT 和 VHT 能力，而不是本机的。加入和四次握手约 100 ms。 |
+| 链路 | 5 s 内仍收到帧时忽略固件的 beacon 丢失。VHT MCS 10 和 11 的帧会被丢弃。 |
+| 系统 | 系统无法保存网络密码，因此不把该网络视为已知网络。 |
+
 ## 下一步
 
-继续 [DSP、音频和电源](/zh/porting/power)，或返回[驱动清单](/zh/porting/drivers)。
+继续[蓝牙](/zh/porting/bluetooth)。也可返回[驱动清单](/zh/porting/drivers)。

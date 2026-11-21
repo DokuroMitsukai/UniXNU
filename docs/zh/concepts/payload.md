@@ -47,6 +47,11 @@ initrd = "Payloads/scratch-data.img"
 args = "-v serial=3"
 ```
 
+所选内核配置启用了 `CONFIG_XNU_OWNER_DATA_MOUNT` 时，必须通过
+`--data-ramdisk FILE` 或本地构建配置的 `[build] data_ramdisk` 提供种子。
+没有生成 `.config` 时检查所选设备 defconfig。持久化覆盖层也需要原始种子来
+发布 Data 卷；更换种子不能恢复旧 Data。缺少种子会在写负载前报错。
+
 提供 Data 种子时存在 `initrd`。`args` 是 `[payload] kernel_args` 和 `--kernel-arg` 合并后的命令行。
 
 ## ADT sidecar
@@ -79,6 +84,8 @@ ADT 必须为对应输入预留以下属性：
 | `/chosen/memory-map/PackedRAMDisk` | DarwinBoot 写入 packed ramdisk 地址和大小 |
 | `/chosen/memory-map/TrustCache` | DarwinBoot 写入 trust cache 地址和大小 |
 | `/chosen/darwinboot-memory-size` | 请求大于 256 MiB 的连续窗口 |
+| `/chosen/darwinboot-memory-excluded` | DarwinBoot 写入窗口内内核不得使用的区间（DRAM 段之间的空洞、固件保留的内存），并把可用字节数写入 `memSizeActual` |
+| `/chosen/darwinboot-loader-inputs` | DarwinBoot 写入两条 32 字节记录（载荷内存盘、initrd 缓冲）：基址、大小、UEFI 内存类型、状态、可用字节数 |
 
 DarwinBoot 要求每个输入都有对应占位符。不匹配时返回 `EFI_COMPROMISED_DATA`。
 

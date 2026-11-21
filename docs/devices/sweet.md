@@ -5,16 +5,18 @@ A community-maintained port for SM7150. Current results are based on the maintai
 | Repository | Maintainer |
 | --- | --- |
 | [UniXNU-sweet](https://github.com/CrackerCat/UniXNU-sweet) | [CrackerCat](https://github.com/CrackerCat) |
+| [UniXNU-sweet](https://github.com/zeroninevibedslop/UniXNU-sweet) | [zeroninevibedslop](https://github.com/zeroninevibedslop) |
 
 ## State
 
-The source includes the Sweet ADT, ArmCpu and DarwinBoot overrides, and an Adreno 618 HFI transport. The maintained snapshot records source-kernel and platform-archive builds, plus QEMU CPU registration and advancing timer interrupts. Self-IPI delivery remains unqualified.
+The CrackerCat source snapshot records kernel/platform builds and QEMU CPU/timer checks. Device firmware and root integration for that tree remain pending.
 
-Device firmware integration, Apple component prelink and a root target remain pending. Run the host checks from the repository root before preparing an image.
+The separate zeroninevibedslop port targets iOS 16.7.16 / Darwin 22. Its maintainer reports UFS root mounting, `launchd`, SpringBoard/backboardd surface swaps and USB CDC-ECM telemetry. Adreno 618 power and GMU/HFI startup are recorded; GPU command submission and Metal acceleration remain in progress. Follow each repository's own OS inputs and build path.
 
 ## Sources
 
-- [README: CrackerCat/UniXNU-sweet](https://github.com/CrackerCat/UniXNU-sweet/blob/d3dd6fdf9e889f08b2564d92f7fef5b5c913263e/README.md)
+- [Source baseline: CrackerCat/UniXNU-sweet](https://github.com/CrackerCat/UniXNU-sweet/blob/d3dd6fdf9e889f08b2564d92f7fef5b5c913263e/README.md)
+- [iOS 16 port: zeroninevibedslop/UniXNU-sweet](https://github.com/zeroninevibedslop/UniXNU-sweet/blob/843c8ed5398388cf1116b095fb6ef30dbed6b2ad/README.md)
 
 ## Build
 

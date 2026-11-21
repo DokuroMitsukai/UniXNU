@@ -12,6 +12,4 @@
 
 ## 来源
 
-- [板级配置](https://github.com/ArnoDorian123/UniXNU-ruyi/blob/9fdf6d9dac150184b8a0fe1276c86d87d1ff1c5a/board.toml)
-
-按[移植设备](/zh/porting/steps)完成板级输入与驱动集成，再按[启动验证顺序](/zh/porting/bring-up)记录结果。
+- [板级配置: ArnoDorian123/UniXNU-ruyi](https://github.com/ArnoDorian123/UniXNU-ruyi/blob/5394473ed77d634269e9023d4f97a9429242ef5a/board.toml)

@@ -12,6 +12,8 @@ For repeated builds, save paths in [unixnu.local.toml](/reference/configuration#
 4. Build the payload, then follow [boot-image integration](#boot-image-integration). Check `boot/boot.json` and the packaged payload before booting.
 5. On the device, confirm the configured menu entry and DarwinBoot handoff using [verification](#verification). If the entry is absent, work through [payload discovery](#payload-discovery).
 
+CLANGPDB requires matching Clang and LLD releases. `CLANG_BIN` must contain executable `clang`, `lld-link`, `llvm-lib` and `llvm-rc`. The firmware toolchain is checked before other requested build stages.
+
 ## Required integration
 
 Build firmware from the UniXNU checkout after selecting the device:
@@ -39,7 +41,7 @@ HobLib|MdePkg/Library/DxeHobLib/DxeHobLib.inf
 FdtLib|MdePkg/Library/BaseFdtLib/BaseFdtLib.inf
 ```
 
-Add `PartitionDxe` when the payload uses a partition table. The FAT driver also needs the platform's Unicode collation service. sheng's `Include/DXE.inc` contains these dependencies.
+Add `PartitionDxe` when the payload uses a partition table. The FAT driver also needs the platform's Unicode collation service. The reference firmware's `Include/DXE.inc` contains these dependencies.
 
 `UniXNURamDiskDxe` is shared by devices using Mu-Silicium's FDT handoff. Its source is in UniXNU's `package/UniXNUPkg/Driver/UniXNURamDiskDxe/`. Board memory reservations and memory expansion remain in the firmware platform.
 
@@ -229,6 +231,42 @@ The output path comes from `[firmware] fd`:
 fd = "Build/<device>Pkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
 ```
 
+For boards selecting `bootimg.image.ramdisk_compression = "uefi-chunks"`, `bootimg` encodes the FAT in independent 1 MiB UEFI-compressed chunks. The matching `UniXNURamDiskDxe` reads this format with a 1 MiB cache. `ramdisk_max_bytes` limits the encoded transfer; `boot.json` records both the encoding and logical FAT size.
+
+## sheng watchdog handoff
+
+The sheng profile selects `SHENG_BOOT_GUARD=1`. Its preflight imports the device's `BootResetCore.h` into the firmware checkout. SEC verifies the PMIC bootloader reboot reason and arms Gunyah's 30000 ms watchdog. DXE pings every two seconds for a 180-second firmware budget; ExitBootServices sends the final firmware ping.
+
+The matching XNU kernel uses `uefi-watchdog=1` and takes over at `EARLY_BOOT`, pinging every ten seconds. `autoreset=<seconds>` bounds the run; a zero deadline keeps the watchdog serviced. Keep the firmware and kernel configuration together. The sheng lab builds COFF firmware with LLVM and LLD 22.1.8. `CLANG_BIN` points to a directory containing that toolchain's `clang`, `lld-link`, `llvm-lib` and `llvm-rc`.
+
+From the UniXNU checkout, prepare that directory:
+
+```sh
+brew install llvm@22 lld@22
+mkdir -p .cache/edk2-llvm22
+for edk2_tool in clang llvm-lib llvm-rc; do
+  ln -sf "$(brew --prefix llvm@22)/bin/$edk2_tool" ".cache/edk2-llvm22/$edk2_tool"
+done
+ln -sf "$(brew --prefix lld@22)/bin/lld-link" .cache/edk2-llvm22/lld-link
+```
+
+Set `clang_bin = ".cache/edk2-llvm22"` in `unixnu.local.toml`.
+
+
+To qualify the early return path, pack a known header-v0 XNU image with the selected firmware and a kernel-entry wait:
+
+```sh
+python3 ../UniXNU-sheng/scripts/prepare-sheng-watchdog-probe.py \
+  /path/to/known-boot.img /path/to/watchdog-probe.img \
+  --uefi ../uefi-sheng --fd /path/to/SILICIUM_UEFI.fd \
+  --dtb /path/to/sheng.dtb
+fastboot -s SERIAL boot /path/to/watchdog-probe.img
+```
+
+The probe waits before `EARLY_BOOT` and has a 120-second PSCI reset fallback. With firmware `fb2b2ae1`, fastboot returned 70.503 seconds after the boot command, before that fallback. The elapsed time includes firmware startup; the configured hardware timeout is 30 seconds.
+
+The inherited kernel path pings the already running firmware timer and starts its service thread. `patch-sheng-inherited-watchdog.py INPUT OUTPUT --kernel-args "uefi-watchdog=1"` qualifies that path on an existing source-built kernel with the matching instruction sequence; boot the result with the inherited-watchdog profile.
+
 ## External firmware builds
 
 A firmware supplied with `./unixnu bootimg --fd <file>` needs the same DSC/FDF
@@ -268,10 +306,10 @@ A driver can live in the firmware volume or in the payload.
 | Firmware volume | Add the INF to the DSC and FDF | Firmware dispatches it, or UniXNUDxe starts the application |
 | Payload | Build a standalone `.efi` | `[[driver]]` in `unixnu.toml` or a kit |
 
-See [UEFI drivers](/drivers/uefi-drivers) for the INF, entry point and injection details.
+See [Develop a driver](/porting/driver-development#uefi-driver) for the load options.
 
 ## Next steps
 
 - [Device tree](/porting/device-tree)
 - [Bring-up order](/porting/bring-up)
-- [UEFI drivers](/drivers/uefi-drivers)
+- [Develop a driver](/porting/driver-development)

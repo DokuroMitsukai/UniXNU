@@ -1,0 +1,887 @@
+[
+  {
+    "name": "sheng",
+    "title": "Xiaomi Pad 6S Pro (sheng) (official)",
+    "title_zh": "小米平板 6S Pro（sheng）（官方维护）"
+  },
+  {
+    "name": "models/a04br3",
+    "title": "a04br3",
+    "title_zh": "a04br3"
+  },
+  {
+    "name": "models/ace6",
+    "title": "ace6",
+    "title_zh": "ace6"
+  },
+  {
+    "name": "models/alioth",
+    "title": "alioth",
+    "title_zh": "alioth"
+  },
+  {
+    "name": "models/alphaplus",
+    "title": "alphaplus",
+    "title_zh": "alphaplus"
+  },
+  {
+    "name": "models/amethyst",
+    "title": "amethyst",
+    "title_zh": "amethyst"
+  },
+  {
+    "name": "models/andromeda",
+    "title": "andromeda",
+    "title_zh": "andromeda"
+  },
+  {
+    "name": "models/apollo",
+    "title": "apollo",
+    "title_zh": "apollo"
+  },
+  {
+    "name": "models/asteroids",
+    "title": "asteroids",
+    "title_zh": "asteroids"
+  },
+  {
+    "name": "models/aston",
+    "title": "aston",
+    "title_zh": "aston"
+  },
+  {
+    "name": "models/babylon",
+    "title": "babylon",
+    "title_zh": "babylon"
+  },
+  {
+    "name": "models/bbk-a2",
+    "title": "bbk-a2",
+    "title_zh": "bbk-a2"
+  },
+  {
+    "name": "models/bluejay",
+    "title": "bluejay",
+    "title_zh": "bluejay"
+  },
+  {
+    "name": "models/braveark",
+    "title": "braveark",
+    "title_zh": "braveark"
+  },
+  {
+    "name": "models/caihong",
+    "title": "caihong",
+    "title_zh": "caihong"
+  },
+  {
+    "name": "models/camellia",
+    "title": "camellia",
+    "title_zh": "camellia"
+  },
+  {
+    "name": "models/cas",
+    "title": "cas",
+    "title_zh": "cas"
+  },
+  {
+    "name": "models/cepheus",
+    "title": "cepheus",
+    "title_zh": "cepheus"
+  },
+  {
+    "name": "models/cheeseburger",
+    "title": "cheeseburger",
+    "title_zh": "cheeseburger"
+  },
+  {
+    "name": "models/chiron",
+    "title": "chiron",
+    "title_zh": "chiron"
+  },
+  {
+    "name": "models/clover",
+    "title": "clover",
+    "title_zh": "clover"
+  },
+  {
+    "name": "models/cmi",
+    "title": "cmi",
+    "title_zh": "cmi"
+  },
+  {
+    "name": "models/cupid",
+    "title": "cupid",
+    "title_zh": "cupid"
+  },
+  {
+    "name": "models/d1x",
+    "title": "d1x",
+    "title_zh": "d1x"
+  },
+  {
+    "name": "models/d2xq",
+    "title": "d2xq",
+    "title_zh": "d2xq"
+  },
+  {
+    "name": "models/dada",
+    "title": "dada",
+    "title_zh": "dada"
+  },
+  {
+    "name": "models/dada2",
+    "title": "dada2",
+    "title_zh": "dada2"
+  },
+  {
+    "name": "models/dagu",
+    "title": "dagu",
+    "title_zh": "dagu"
+  },
+  {
+    "name": "models/dali",
+    "title": "dali",
+    "title_zh": "dali"
+  },
+  {
+    "name": "models/dandelion",
+    "title": "dandelion",
+    "title_zh": "dandelion"
+  },
+  {
+    "name": "models/dby-w09",
+    "title": "dby-w09",
+    "title_zh": "dby-w09"
+  },
+  {
+    "name": "models/dipper",
+    "title": "dipper",
+    "title_zh": "dipper"
+  },
+  {
+    "name": "models/diting",
+    "title": "diting",
+    "title_zh": "diting"
+  },
+  {
+    "name": "models/dizi",
+    "title": "dizi",
+    "title_zh": "dizi"
+  },
+  {
+    "name": "models/dodge",
+    "title": "dodge",
+    "title_zh": "dodge"
+  },
+  {
+    "name": "models/droidvm",
+    "title": "droidvm",
+    "title_zh": "droidvm"
+  },
+  {
+    "name": "models/dumpling",
+    "title": "dumpling",
+    "title_zh": "dumpling"
+  },
+  {
+    "name": "models/e5",
+    "title": "e5",
+    "title_zh": "e5"
+  },
+  {
+    "name": "models/elden",
+    "title": "elden",
+    "title_zh": "elden"
+  },
+  {
+    "name": "models/elish",
+    "title": "elish",
+    "title_zh": "elish"
+  },
+  {
+    "name": "models/enchilada",
+    "title": "enchilada",
+    "title_zh": "enchilada"
+  },
+  {
+    "name": "models/enuma",
+    "title": "enuma",
+    "title_zh": "enuma"
+  },
+  {
+    "name": "models/erhai",
+    "title": "erhai",
+    "title_zh": "erhai"
+  },
+  {
+    "name": "models/evb10",
+    "title": "evb10",
+    "title_zh": "evb10"
+  },
+  {
+    "name": "models/fairlady",
+    "title": "fairlady",
+    "title_zh": "fairlady"
+  },
+  {
+    "name": "models/fajita",
+    "title": "fajita",
+    "title_zh": "fajita"
+  },
+  {
+    "name": "models/flashlm",
+    "title": "flashlm",
+    "title_zh": "flashlm"
+  },
+  {
+    "name": "models/fuxi",
+    "title": "fuxi",
+    "title_zh": "fuxi"
+  },
+  {
+    "name": "models/g0245d",
+    "title": "g0245d",
+    "title_zh": "g0245d"
+  },
+  {
+    "name": "models/g0345d",
+    "title": "g0345d",
+    "title_zh": "g0345d"
+  },
+  {
+    "name": "models/garnet",
+    "title": "garnet",
+    "title_zh": "garnet"
+  },
+  {
+    "name": "models/gauguin",
+    "title": "gauguin",
+    "title_zh": "gauguin"
+  },
+  {
+    "name": "models/giulia",
+    "title": "giulia",
+    "title_zh": "giulia"
+  },
+  {
+    "name": "models/grus",
+    "title": "grus",
+    "title_zh": "grus"
+  },
+  {
+    "name": "models/gta4l",
+    "title": "gta4l",
+    "title_zh": "gta4l"
+  },
+  {
+    "name": "models/gtaxllte",
+    "title": "gtaxllte",
+    "title_zh": "gtaxllte"
+  },
+  {
+    "name": "models/gts7fewifi",
+    "title": "gts7fewifi",
+    "title_zh": "gts7fewifi"
+  },
+  {
+    "name": "models/gts7xlwifi",
+    "title": "gts7xlwifi",
+    "title_zh": "gts7xlwifi"
+  },
+  {
+    "name": "models/gts9u",
+    "title": "gts9u",
+    "title_zh": "gts9u"
+  },
+  {
+    "name": "models/gts9uwifi",
+    "title": "gts9uwifi",
+    "title_zh": "gts9uwifi"
+  },
+  {
+    "name": "models/guacamole",
+    "title": "guacamole",
+    "title_zh": "guacamole"
+  },
+  {
+    "name": "models/guamp",
+    "title": "guamp",
+    "title_zh": "guamp"
+  },
+  {
+    "name": "models/hawaii",
+    "title": "hawaii",
+    "title_zh": "hawaii"
+  },
+  {
+    "name": "models/haydn",
+    "title": "haydn",
+    "title_zh": "haydn"
+  },
+  {
+    "name": "models/hero2lte",
+    "title": "hero2lte",
+    "title_zh": "hero2lte"
+  },
+  {
+    "name": "models/hotdog",
+    "title": "hotdog",
+    "title_zh": "hotdog"
+  },
+  {
+    "name": "models/houji",
+    "title": "houji",
+    "title_zh": "houji"
+  },
+  {
+    "name": "models/hummer",
+    "title": "hummer",
+    "title_zh": "hummer"
+  },
+  {
+    "name": "models/instantnoodlep",
+    "title": "instantnoodlep",
+    "title_zh": "instantnoodlep"
+  },
+  {
+    "name": "models/ishtar",
+    "title": "ishtar",
+    "title_zh": "ishtar"
+  },
+  {
+    "name": "models/j716f",
+    "title": "j716f",
+    "title_zh": "j716f"
+  },
+  {
+    "name": "models/judyp",
+    "title": "judyp",
+    "title_zh": "judyp"
+  },
+  {
+    "name": "models/kebab",
+    "title": "kebab",
+    "title_zh": "kebab"
+  },
+  {
+    "name": "models/kenzo",
+    "title": "kenzo",
+    "title_zh": "kenzo"
+  },
+  {
+    "name": "models/komodo",
+    "title": "komodo",
+    "title_zh": "komodo"
+  },
+  {
+    "name": "models/lafa",
+    "title": "lafa",
+    "title_zh": "lafa"
+  },
+  {
+    "name": "models/lavender",
+    "title": "lavender",
+    "title_zh": "lavender"
+  },
+  {
+    "name": "models/lemonades",
+    "title": "lemonades",
+    "title_zh": "lemonades"
+  },
+  {
+    "name": "models/liuqin",
+    "title": "liuqin",
+    "title_zh": "liuqin"
+  },
+  {
+    "name": "models/lmipro",
+    "title": "lmipro",
+    "title_zh": "lmipro"
+  },
+  {
+    "name": "models/lumia950",
+    "title": "lumia950",
+    "title_zh": "lumia950"
+  },
+  {
+    "name": "models/luming",
+    "title": "luming",
+    "title_zh": "luming"
+  },
+  {
+    "name": "models/m2381",
+    "title": "m2381",
+    "title_zh": "m2381"
+  },
+  {
+    "name": "models/malachite",
+    "title": "malachite",
+    "title_zh": "malachite"
+  },
+  {
+    "name": "models/marble",
+    "title": "marble",
+    "title_zh": "marble"
+  },
+  {
+    "name": "models/meizu15",
+    "title": "meizu15",
+    "title_zh": "meizu15"
+  },
+  {
+    "name": "models/meizu21",
+    "title": "meizu21",
+    "title_zh": "meizu21"
+  },
+  {
+    "name": "models/merlinx",
+    "title": "merlinx",
+    "title_zh": "merlinx"
+  },
+  {
+    "name": "models/mh2lm",
+    "title": "mh2lm",
+    "title_zh": "mh2lm"
+  },
+  {
+    "name": "models/miatoll",
+    "title": "miatoll",
+    "title_zh": "miatoll"
+  },
+  {
+    "name": "models/miro",
+    "title": "miro",
+    "title_zh": "miro"
+  },
+  {
+    "name": "models/mondrian",
+    "title": "mondrian",
+    "title_zh": "mondrian"
+  },
+  {
+    "name": "models/munch",
+    "title": "munch",
+    "title_zh": "munch"
+  },
+  {
+    "name": "models/muyu",
+    "title": "muyu",
+    "title_zh": "muyu"
+  },
+  {
+    "name": "models/myron",
+    "title": "myron",
+    "title_zh": "myron"
+  },
+  {
+    "name": "models/nabu",
+    "title": "nabu",
+    "title_zh": "nabu"
+  },
+  {
+    "name": "models/nash",
+    "title": "nash",
+    "title_zh": "nash"
+  },
+  {
+    "name": "models/negroni",
+    "title": "negroni",
+    "title_zh": "negroni"
+  },
+  {
+    "name": "models/nio",
+    "title": "nio",
+    "title_zh": "nio"
+  },
+  {
+    "name": "models/nuwa",
+    "title": "nuwa",
+    "title_zh": "nuwa"
+  },
+  {
+    "name": "models/nx721j",
+    "title": "nx721j",
+    "title_zh": "nx721j"
+  },
+  {
+    "name": "models/nx729j",
+    "title": "nx729j",
+    "title_zh": "nx729j"
+  },
+  {
+    "name": "models/nx769j",
+    "title": "nx769j",
+    "title_zh": "nx769j"
+  },
+  {
+    "name": "models/odin",
+    "title": "odin",
+    "title_zh": "odin"
+  },
+  {
+    "name": "models/odin3",
+    "title": "odin3",
+    "title_zh": "odin3"
+  },
+  {
+    "name": "models/onclite",
+    "title": "onclite",
+    "title_zh": "onclite"
+  },
+  {
+    "name": "models/oneplus13t",
+    "title": "oneplus13t",
+    "title_zh": "oneplus13t"
+  },
+  {
+    "name": "models/onyx",
+    "title": "onyx",
+    "title_zh": "onyx"
+  },
+  {
+    "name": "models/opd2515",
+    "title": "opd2515",
+    "title_zh": "opd2515"
+  },
+  {
+    "name": "models/opi5plus",
+    "title": "opi5plus",
+    "title_zh": "opi5plus"
+  },
+  {
+    "name": "models/orangepi5",
+    "title": "orangepi5",
+    "title_zh": "orangepi5"
+  },
+  {
+    "name": "models/pandora",
+    "title": "pandora",
+    "title_zh": "pandora"
+  },
+  {
+    "name": "models/panther",
+    "title": "panther",
+    "title_zh": "panther"
+  },
+  {
+    "name": "models/pclm10",
+    "title": "pclm10",
+    "title_zh": "pclm10"
+  },
+  {
+    "name": "models/pd1936",
+    "title": "pd1936",
+    "title_zh": "pd1936"
+  },
+  {
+    "name": "models/pd2049",
+    "title": "pd2049",
+    "title_zh": "pd2049"
+  },
+  {
+    "name": "models/pdx203",
+    "title": "pdx203",
+    "title_zh": "pdx203"
+  },
+  {
+    "name": "models/peridot",
+    "title": "peridot",
+    "title_zh": "peridot"
+  },
+  {
+    "name": "models/phy120",
+    "title": "phy120",
+    "title_zh": "phy120"
+  },
+  {
+    "name": "models/piano",
+    "title": "piano",
+    "title_zh": "piano"
+  },
+  {
+    "name": "models/picasso",
+    "title": "picasso",
+    "title_zh": "picasso"
+  },
+  {
+    "name": "models/pipa",
+    "title": "pipa",
+    "title_zh": "pipa"
+  },
+  {
+    "name": "models/pje110",
+    "title": "pje110",
+    "title_zh": "pje110"
+  },
+  {
+    "name": "models/pma120",
+    "title": "pma120",
+    "title_zh": "pma120"
+  },
+  {
+    "name": "models/polaris",
+    "title": "polaris",
+    "title_zh": "polaris"
+  },
+  {
+    "name": "models/pong",
+    "title": "pong",
+    "title_zh": "pong"
+  },
+  {
+    "name": "models/pudding",
+    "title": "pudding",
+    "title_zh": "pudding"
+  },
+  {
+    "name": "models/pyxis",
+    "title": "pyxis",
+    "title_zh": "pyxis"
+  },
+  {
+    "name": "models/q2q",
+    "title": "q2q",
+    "title_zh": "q2q"
+  },
+  {
+    "name": "models/qemu",
+    "title": "qemu",
+    "title_zh": "qemu"
+  },
+  {
+    "name": "models/r11",
+    "title": "r11",
+    "title_zh": "r11"
+  },
+  {
+    "name": "models/r8q",
+    "title": "r8q",
+    "title_zh": "r8q"
+  },
+  {
+    "name": "models/raphael",
+    "title": "raphael",
+    "title_zh": "raphael"
+  },
+  {
+    "name": "models/rmx1971",
+    "title": "rmx1971",
+    "title_zh": "rmx1971"
+  },
+  {
+    "name": "models/rmx3551",
+    "title": "rmx3551",
+    "title_zh": "rmx3551"
+  },
+  {
+    "name": "models/rmx3823",
+    "title": "rmx3823",
+    "title_zh": "rmx3823"
+  },
+  {
+    "name": "models/rodin",
+    "title": "rodin",
+    "title_zh": "rodin"
+  },
+  {
+    "name": "models/rothko",
+    "title": "rothko",
+    "title_zh": "rothko"
+  },
+  {
+    "name": "models/ruby",
+    "title": "ruby",
+    "title_zh": "ruby"
+  },
+  {
+    "name": "models/ruyi",
+    "title": "ruyi",
+    "title_zh": "ruyi"
+  },
+  {
+    "name": "models/sagit",
+    "title": "sagit",
+    "title_zh": "sagit"
+  },
+  {
+    "name": "models/sheng",
+    "title": "sheng (community)",
+    "title_zh": "sheng（社区）"
+  },
+  {
+    "name": "models/sheng-macos",
+    "title": "sheng-macos",
+    "title_zh": "sheng-macos"
+  },
+  {
+    "name": "models/shennong",
+    "title": "shennong",
+    "title_zh": "shennong"
+  },
+  {
+    "name": "models/sirius",
+    "title": "sirius",
+    "title_zh": "sirius"
+  },
+  {
+    "name": "models/sm-t970",
+    "title": "sm-t970",
+    "title_zh": "sm-t970"
+  },
+  {
+    "name": "models/songyuan",
+    "title": "songyuan",
+    "title_zh": "songyuan"
+  },
+  {
+    "name": "models/starlte",
+    "title": "starlte",
+    "title_zh": "starlte"
+  },
+  {
+    "name": "models/sweet",
+    "title": "sweet",
+    "title_zh": "sweet"
+  },
+  {
+    "name": "models/t610yp",
+    "title": "t610yp",
+    "title_zh": "t610yp"
+  },
+  {
+    "name": "models/tb128fu",
+    "title": "tb128fu",
+    "title_zh": "tb128fu"
+  },
+  {
+    "name": "models/tb365fc",
+    "title": "tb365fc",
+    "title_zh": "tb365fc"
+  },
+  {
+    "name": "models/tb371fc",
+    "title": "tb371fc",
+    "title_zh": "tb371fc"
+  },
+  {
+    "name": "models/tb375fc",
+    "title": "tb375fc",
+    "title_zh": "tb375fc"
+  },
+  {
+    "name": "models/tb710fu",
+    "title": "tb710fu",
+    "title_zh": "tb710fu"
+  },
+  {
+    "name": "models/thor",
+    "title": "thor",
+    "title_zh": "thor"
+  },
+  {
+    "name": "models/thyme",
+    "title": "thyme",
+    "title_zh": "thyme"
+  },
+  {
+    "name": "models/tundra",
+    "title": "tundra",
+    "title_zh": "tundra"
+  },
+  {
+    "name": "models/udon",
+    "title": "udon",
+    "title_zh": "udon"
+  },
+  {
+    "name": "models/uke",
+    "title": "uke",
+    "title_zh": "uke"
+  },
+  {
+    "name": "models/umi",
+    "title": "umi",
+    "title_zh": "umi"
+  },
+  {
+    "name": "models/unicorn",
+    "title": "unicorn",
+    "title_zh": "unicorn"
+  },
+  {
+    "name": "models/unisoc",
+    "title": "unisoc",
+    "title_zh": "unisoc"
+  },
+  {
+    "name": "models/unixnu-build",
+    "title": "unixnu-build",
+    "title_zh": "unixnu-build"
+  },
+  {
+    "name": "models/venus",
+    "title": "venus",
+    "title_zh": "venus"
+  },
+  {
+    "name": "models/vermeer",
+    "title": "vermeer",
+    "title_zh": "vermeer"
+  },
+  {
+    "name": "models/vili",
+    "title": "vili",
+    "title_zh": "vili"
+  },
+  {
+    "name": "models/vince",
+    "title": "vince",
+    "title_zh": "vince"
+  },
+  {
+    "name": "models/wayne",
+    "title": "wayne",
+    "title_zh": "wayne"
+  },
+  {
+    "name": "models/whyred",
+    "title": "whyred",
+    "title_zh": "whyred"
+  },
+  {
+    "name": "models/x9",
+    "title": "x9",
+    "title_zh": "x9"
+  },
+  {
+    "name": "models/xun",
+    "title": "xun",
+    "title_zh": "xun"
+  },
+  {
+    "name": "models/yunluo",
+    "title": "yunluo",
+    "title_zh": "yunluo"
+  },
+  {
+    "name": "models/zeta",
+    "title": "zeta",
+    "title_zh": "zeta"
+  },
+  {
+    "name": "models/zeus",
+    "title": "zeus",
+    "title_zh": "zeus"
+  },
+  {
+    "name": "models/zizhan",
+    "title": "zizhan",
+    "title_zh": "zizhan"
+  },
+  {
+    "name": "models/zorn",
+    "title": "zorn",
+    "title_zh": "zorn"
+  }
+]

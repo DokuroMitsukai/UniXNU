@@ -29,7 +29,7 @@ Choose the transport before selecting the reference code.
 | [ShengAdsp.h](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/ShengAdsp.h#L15) | `ShengAdspClient`, channel registration and queued sends |
 | [LegacyDisplayProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/LegacyDisplayProbe.cpp#L493) | Initialization order for DSP and its consumers |
 
-The sheng files illustrate a Qualcomm GLINK integration. For that interface:
+The linked files illustrate a Qualcomm GLINK integration. For that interface:
 
 1. Adapt firmware authentication, reserved memory and power votes to the target.
    Establish the mailbox and ready/crash notification paths before opening a channel.
@@ -41,7 +41,7 @@ The sheng files illustrate a Qualcomm GLINK integration. For that interface:
    sizes and opening direction from the target service protocol.
 4. Handle `sheng_adsp_send` results: `0` queues the message, `-1` reports a full
    queue or oversized message, and `-2` reports invalid arguments. The reference
-   API accepts messages up to `SHENG_ADSP_MAX_MESSAGE` (512 bytes). A service with
+   API accepts messages up to `SHENG_ADSP_MAX_MESSAGE` (560 bytes). A service with
    larger packets needs corresponding transport and receive-buffer support.
 5. On disconnect, cancel requests and invalidate remote handles. On reconnect,
    negotiate the channel and restore subscriptions before resuming consumers.
@@ -87,7 +87,7 @@ interfaces, and retain the applicable source licenses when reusing code.
 5. **Connect the OS service.** Identify the target OS audio provider, required
    methods, request layouts, mapped-memory types and completion notifications
    from the selected kernelcache and framework. Record these ABI inputs using
-   [built-in driver integration](/drivers/xnu-drivers#compile-against-the-kernel-abi).
+   [built-in driver integration](/porting/driver-development#compile-against-the-kernel-abi).
    Connect format selection, start/stop, position and buffer completion to the
    stream engine. Publish only formats and routes implemented by that endpoint.
 6. **Exercise the route.** Play a known PCM signal or record a known input. Check
@@ -101,11 +101,44 @@ On SM8550 these firmware details decide whether a route starts:
 - The DSP offers small GLINK intents first and grants a larger one on request. Keep the granted intent even when the remote intent table is full.
 - PRM requests use the PRM's own port and PRM clock IDs; the TX core clock is `0x30c`, not the device tree index.
 - The VA macro gates the TX SoundWire master clock as well as the TX macro.
-- The primary microphone runs AMIC3 on micbias 3 into ADC2, codec data port 1 channel 2, master port 2, TX decimator 0 and codec DMA TX3.
+- CoreAudio assumes a 24 MHz host clock. On a 19.2 MHz timebase the audio service corrects CoreAudio's constant at start, otherwise the audio server's IO cycles run 25 percent long and playback and capture stutter.
 
 **Result:** a complete route carries PCM data, reports progress and releases its
 resources. Save the route description, format, stream counters and captured
 output. The next endpoint gets its own route configuration and observations.
+
+### Microphone capture {#microphone}
+
+A capture route adds a codec and a SoundWire link to the stream steps above.
+
+1. **Power the codec.** Release its reset and enable its supply. Vote the TX and
+   VA macro clocks, then open both gates: on SM8550 the VA macro also gates the
+   TX SoundWire master.
+2. **Bring up the SoundWire link.** Start the TX master and wait for the codec to
+   enumerate. Read its manufacturer and part IDs before configuring it.
+3. **Configure the analog path.** Select the microphone input, its bias and the
+   ADC, set the ADC gain, then map the ADC to a codec data port and channel.
+4. **Configure the digital path.** Connect the master port to the TX decimator
+   that reads it, and the decimator to the codec DMA interface the DSP graph uses.
+5. **Read buffers.** Queue capture buffers through the read request. Each answer
+   carries a byte count and an offset; take only those bytes, a short period is normal.
+6. **Publish the input.** Expose an input stream only after a direct capture of a
+   known sound succeeds.
+
+The reference route, from [AudioProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/main/package/AudioProbe.cpp):
+
+| Stage | Reference value |
+| --- | --- |
+| Codec | WCD938x, reset gpio108, supply ldob15, SoundWire device 1 on the TX master (0x6d30000) |
+| Analog | AMIC3, micbias 3, ADC2 |
+| Link | Codec data port 1 channel 2 to master port 2 |
+| Digital | TX decimator 0 from SWR_MIC1, codec DMA TX3 |
+| Format | Mono, 48 kHz |
+| iOS | The HAL plug-in's input port; iOS accepts it with the Thunderbolt transport type |
+
+Check capture with `audio=4`, which reads two seconds at boot: the
+`[mic]` and `[mic capture]` log rows give returned periods, bytes, the share of
+non-zero samples and the peak. Then record in an app and read `[audio-io]`.
 
 ## 4. Implement battery reporting {#battery}
 
@@ -147,6 +180,63 @@ If the firmware owns charging control, retain that ownership while implementing
 measurement publication. A host-controlled charger needs its own controller
 protocol, limits and thermal policy.
 
+### PD, PPS and MiPPS on sheng {#sheng-charging}
+
+Sheng uses the DSP battery manager for PD/PPS contracts, charge pumps, current limits and thermal regulation. `package/ShengChargeAuth.c` authenticates both gauges with HMAC-SHA256, then authenticates a Xiaomi adapter advertising SVID `0x2717` and a valid PDO2. The USB request changes the data role to host. Authentication runs once per attachment through the battery manager's serialized request queue.
+
+The Linux tool uses the same C state machine through the Xiaomi `qcom-battery` sysfs interface. Run from the sheng device checkout on its matching Linux kernel with Python 3, a C compiler and C headers:
+
+```sh
+python3 scripts/charge-sheng-linux.py --out charge-before.json
+sudo python3 scripts/charge-sheng-linux.py --authenticate --out charge-auth.json
+```
+
+The captures include adapter identity, authentication state, PD/PPS properties, both charge pumps and battery measurements. Compare them with macOS `log-power=1` charger rows using the same charger, cable, battery level and temperature. Host protocol checks cover authentication and attachment changes; negotiated charging power requires the physical adapter measurement.
+
+### Sheng Linux charge reader
+
+The charge reader combines Linux 7.3.4, the static `sheng-charge` executable,
+ADSP firmware and the driver's module dependencies. Build it on the host:
+
+```sh
+python3 ../UniXNU-sheng/scripts/prepare-linux-charge-reader.py \
+  --unixnu . --busybox /path/to/static-aarch64-busybox \
+  --out /path/to/sheng-linux-charge.img
+```
+
+With the tablet in fastboot, start the charger test from the host:
+
+```sh
+python3 ../UniXNU-sheng/scripts/run-sheng-charge-test.py \
+  --serial SERIAL --reader /path/to/sheng-linux-charge.img \
+  --out /path/to/charge-capture
+```
+
+Add `--snapshot` to collect the currently connected source and battery readings while keeping the PC connected.
+
+The host boots the reader and explicitly runs `/bin/sheng-charge-setup` to
+load the charging modules. The tool waits up to 30 seconds for a successful
+battery-manager property read. Authentication uses the same `ShengChargeAuth.c`
+state machine as macOS in an independent session with SIGHUP ignored, standard
+input from `/dev/null` and output written to RAM files. Follow the host prompt:
+connect the PD charger for 140 seconds, then reconnect the PC within the printed time.
+
+The host retrieves `charge.log`, `charge-console.log`, kernel logs and the
+program's exit status, runs `rebootbl`, and verifies fastboot. `result.json`
+records authentication and device-return results. The host time limit is
+270 seconds; the reader starts its own 300-second return timer before loading
+charging modules.
+
+Before loading ADSP modules, `/bin/sheng-charge --arm-fastboot` resolves the
+active device tree's SDAM reboot-reason cell, writes bootloader value 2 to bits
+7:1 at offset `0x48`, preserves bit 0 and verifies readback. A failed check runs
+`rebootbl`. The kernel uses `panic=5` and `qcom_scm.download_mode=off`; its panic
+restart preserves the prepared bootloader reason.
+
+The captures include fuel-gauge, adapter and charge-pump readings. The Xiaomi
+attributes are under the `pmic_glink.power-supply` auxiliary device's `xiaomi`
+directory; the tools discover that path automatically.
+
 ## 5. Implement frequency and power operations {#power}
 
 Read [CpuFreqProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/552b67499135bae191f415f444d782a6942c252e/package/CpuFreqProbe.cpp) for EPSS LUT and CPU/L3 operating-point access, [QcomRpmh.h](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/QcomRpmh.h) for resource
@@ -170,9 +260,29 @@ On SM8550 the governors use these inputs:
 
 - CPU: each CPU's idle time from the scheduler, read every 16 ms. A domain follows its busiest CPU with a 1.25 margin and steps down after four quieter windows.
 - GPU: the GMU XO busy counter. The level that keeps the GPU about half busy is voted over HFI together with that level's bandwidth.
+- Touch: a touch report holds the P CPU domains and the GPU at their top level until 1 s after the last report (`cpufreq-boost-ms`, `gpu-dcvs-boost-ms`).
+- Frames: GPU submissions in 2 of the last 4 windows keep every CPU domain at 60 percent of its top level or more for 300 ms. GPU work after an idle drop starts at twice the current clock, at least 578 MHz, for 50 ms.
+- Fence waits: a waiter sleeps until the fence interrupt, at most 1 ms (`gpu-pause-us`), instead of polling.
 
 **Result:** frequency requests and power transitions have observed effects and
 preserve the dependent devices' operation.
+
+### Sheng platform sleep
+
+`platform-sleep=1` selects the board's XNU sleep hook and ArmCpu suspend path.
+Secondary CPUs use PSCI CPU_OFF. The boot CPU waits for the lid, power key or
+`platform-sleep-wake-after=<seconds>` deadline, acknowledges rejected interrupts
+and restores the saved interrupt enables on wake. Board ticks feed the inherited
+firmware watchdog every 10 seconds while asleep.
+
+Opening the lid or pressing the power key requests a full wake. The backlight
+returns after two presented frames, with a 1500 ms timeout; a display without
+frame counters uses a 600 ms delay. A touchpad report gap above 60 ms starts a
+new contact position. A closed cover releases touchscreen contacts and gates
+later reports until it opens.
+
+The [device record](https://github.com/UniXNU/UniXNU-sheng/blob/main/porting.toml)
+identifies the build checks and device evidence for these paths.
 
 ## 6. Build and verify the interfaces
 

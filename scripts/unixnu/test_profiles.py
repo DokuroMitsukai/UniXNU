@@ -43,13 +43,14 @@ class ResolveOsTests(unittest.TestCase):
             with self.assertRaisesRegex(Error, '--os 17'):
                 profiles.resolve_os(context(root), '17')
 
-    def test_retained_profile_is_the_only_one_in_the_repository(self):
+    def test_repository_ships_the_reviewed_profiles(self):
         names = sorted(path.name for path in (REPOSITORY / 'profiles/os').iterdir() if path.is_dir())
-        self.assertEqual(names, [PROFILE])
-        with self.assertRaisesRegex(Error, '--os 26'):
-            profiles.resolve_os(context(REPOSITORY), '26')
-        with self.assertRaisesRegex(Error, '--os 27'):
-            profiles.resolve_os(context(REPOSITORY), '27')
+        self.assertEqual(names, ['ipados-17.7.11-21H461', 'ipados-26.5.2-23F84',
+                                 'ipados-27.0.1-24A446', 'macos-27.3-26C5035r'])
+        self.assertEqual(profiles.resolve_os(context(REPOSITORY), '17'), PROFILE)
+        self.assertEqual(profiles.resolve_os(context(REPOSITORY), '26'), 'ipados-26.5.2-23F84')
+        self.assertEqual(profiles.resolve_os(context(REPOSITORY), '27'), 'ipados-27.0.1-24A446')
+        self.assertEqual(profiles.resolve_os(context(REPOSITORY), 'macos-27'), 'macos-27.3-26C5035r')
 
 
 class OsOverrideTests(unittest.TestCase):
@@ -105,14 +106,17 @@ class OsOverrideTests(unittest.TestCase):
             self.assertEqual(ctx.profile_roots['os'], Path(directory) / 'profiles/os' / PROFILE)
             self.assertEqual(result['board']['os_profile'], PROFILE)
 
-    def test_arm64e_profile_is_rejected(self):
+    def test_arm64e_profile_selects_the_arm64e_root(self):
         with TemporaryDirectory() as directory:
             ctx, soc = self.build(Path(directory))
             (Path(directory) / 'profiles/os' / PROFILE / 'profile.toml').write_text(
                 '[os]\nname = "' + PROFILE + '"\narch = "arm64e"\n')
+            arm64e = Path(directory) / 'profiles/arch/arm64e'
+            arm64e.mkdir(parents=True)
+            (arm64e / 'profile.toml').write_text('[arch]\nname = "arm64e"\n')
             with patch.object(feeds, 'resolve_soc', return_value=SimpleNamespace(path=soc)):
-                with self.assertRaisesRegex(Error, 'arch is arm64e'):
-                    profiles.load(ctx)
+                profiles.load(ctx)
+            self.assertEqual(ctx.profile_roots['arch'], Path(directory) / 'profiles/arch/arm64e')
 
     def test_installed_profile_outside_the_package_contract_is_rejected(self):
         with TemporaryDirectory() as directory:

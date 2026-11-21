@@ -8,13 +8,13 @@
 
 ## 当前状态
 
-iOS 16.7.16 已进入主屏幕和锁屏，触控及物理按键可用。移植使用设备加载器、原生 UFS，以及 Android userdata 中由文件承载的根卷。
+设备已进入 iOS 16.7 主屏幕并运行应用，触控、电源/音量键和亮度控制可用。八个 CPU 已运行，记录包含按负载调频、空闲休眠和过热降频。
 
-Adreno 840 已集成 Vulkan 和 Metal，维护者记录了首个 GPU 渲染的主屏幕画面。快速交互会出现系统挂起，当前默认使用 CPU 渲染，GPU 稳定性仍在排查。
+维护者记录了 Adreno 840、Turnip Vulkan 和 Metal 翻译层对系统界面的 GPU 合成。面板直接扫描渲染后的缓冲区，报告的动画帧率约为 120 Hz 面板上的 110 帧/秒。音频 DSP 启动和通信可用，扬声器播放、真实电量报告、Wi-Fi、蜂窝网络及相机支持待完成。
 
 ## 来源
 
-- [README: ShueiTsuki/data-a-live](https://github.com/ShueiTsuki/data-a-live/blob/1a6c05fbc03695adb41a636210b9c48f40e14563/README.md)
+- [README: ShueiTsuki/data-a-live](https://github.com/ShueiTsuki/data-a-live/blob/91f1f2468f30841c39123c7ba20ae520ecd82c84/README.md)
 
 ## 构建
 

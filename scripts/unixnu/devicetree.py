@@ -203,7 +203,7 @@ def arm_io_window(hardware):
 
 
 STRINGS = {'compatible', 'device_type', 'reg-names', 'interrupt-names', 'clock-names', 'method'}
-U32 = {'phandle', 'linux,phandle', '#interrupt-cells', '#iommu-cells', '#clock-cells', 'clock-frequency', 'timebase-frequency'}
+U32 = {'phandle', 'linux,phandle', '#interrupt-cells', '#iommu-cells', '#clock-cells', 'clock-frequency', 'timebase-frequency', 'transport-encoding', 'transport-speed'}
 U64 = {'redistributor-stride'}
 FLAGS = {'interrupt-controller', 'dma-coherent'}
 REFERENCES = {'interrupt-parent': None, 'iommus': '#iommu-cells', 'clocks': '#clock-cells'}
@@ -261,10 +261,13 @@ def hardware_properties(entry, handles, base=0):
     return properties
 
 
+PROPERTY_TYPES = ('string', 'strings', 'u32', 'u64', 'bytes')
+
+
 def typed_properties(table):
     result = []
     for kind, properties in table.items():
-        if kind not in ('string', 'strings', 'u32', 'u64', 'bytes'):
+        if kind not in PROPERTY_TYPES:
             raise Error(f'Unknown ADT property type: {kind}')
         for key, value in properties.items():
             if kind == 'string':
@@ -279,7 +282,17 @@ def typed_properties(table):
     return result
 
 
-def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon=False):
+def platform_node(name, table):
+    """A configured ADT node: its property tables by type, and any other key as a child node of the same form."""
+    properties = typed_properties({kind: value for kind, value in table.items() if kind in PROPERTY_TYPES})
+    children = [platform_node(child, value) for child, value in table.items() if child not in PROPERTY_TYPES]
+    for child, value in table.items():
+        if child not in PROPERTY_TYPES and not isinstance(value, dict):
+            raise Error(f'ADT node {name}: {child} is neither a property type nor a child node')
+    return node(name, properties, children)
+
+
+def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon=False, root_policies=False):
     root = read_fdt(Path(dtb).read_bytes())
     entries = list(root.walk())
     handles = {}
@@ -297,7 +310,8 @@ def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon
     dram_base, dram_size = registers(memory[0])[0]
     if payload.get('dram_size') is not None and int(str(payload['dram_size']), 0) != dram_size:
         raise Error('payload.dram_size differs from the hardware DTS')
-    chosen = [('random-seed', os.urandom(64)), ('dram-base', struct.pack('<Q', dram_base)),
+    # xnu-12377 takes 4 x 64 seed bytes on ARM and panics with fewer; older kernels read the first 64.
+    chosen = [('random-seed', os.urandom(256)), ('dram-base', struct.pack('<Q', dram_base)),
               ('dram-size', struct.pack('<Q', dram_size)), *empty_nvram_proxy()]
     if unique_chip_id:
         seed = int(str(unique_chip_id), 16)
@@ -312,6 +326,37 @@ def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon
         if not 0x10000000 <= size <= 0x200000000 or size % 0x200000:
             raise Error('Owned memory must be 256 MiB to 8 GiB in 2 MiB steps')
         chosen.append(('darwinboot-memory-size', struct.pack('<Q', size)))
+    # A table DarwinBoot fills with the ranges of the window the kernel must not use (gaps between DRAM banks, memory the firmware
+    # keeps). With it the window may span more than one run of free memory; only an OS profile whose XNU reads the property sets it.
+    if options.get('owned_memory_excluded_ranges'):
+        value = options['owned_memory_excluded_ranges']
+        slots = 0 if isinstance(value, bool) else int(str(value), 0)
+        if not 1 <= slots <= 4096:
+            raise Error('Owned memory excluded ranges: a table size of 1 to 4096 ranges')
+        chosen.append(('darwinboot-memory-excluded', bytes(16 * slots)))
+    # Two empty records DarwinBoot fills with where its inputs lie in the firmware's memory map (the payload RAM disk and the
+    # entry's initrd buffer); the kernel reports them as kern.boot_payload_memory. With the excluded-range table the loader
+    # also counts the whole pages of a verified input inside the window as usable memory.
+    if options.get('loader_inputs'):
+        chosen.append(('darwinboot-loader-inputs', bytes(64)))
+    # A table DarwinBoot fills with the largest runs of free memory outside the window (a DRAM bank too far from it for the
+    # kernel's page array), for a kernel that adopts it as VM memory or a driver that manages memory of its own.
+    if options.get('owned_memory_outside_ranges'):
+        slots = int(str(options['owned_memory_outside_ranges']), 0)
+        if not 1 <= slots <= 64:
+            raise Error('Owned memory outside ranges: a table size of 1 to 64 ranges')
+        chosen.append(('darwinboot-memory-outside', bytes(16 * slots)))
+        # Parts of those runs the kernel must leave alone although the firmware's map calls them free: memory a board driver
+        # uses at a fixed address. "BASE:SIZE" strings, whole 4 KiB pages.
+        reserved = b''
+        for item in options.get('owned_memory_outside_reserved', []):
+            base, _, size = str(item).partition(':')
+            base, size = int(base, 0), int(size, 0)
+            if base % 0x1000 or size % 0x1000 or not size:
+                raise Error(f'Owned memory outside reserved: {item} is not whole 4 KiB pages')
+            reserved += struct.pack('<QQ', base, size)
+        if reserved:
+            chosen.append(('darwinboot-memory-outside-kept', reserved))
     if options.get('root_match_volume_uuid'):
         volume = str(uuid.UUID(options['root_match_volume_uuid'])).upper()
         chosen.append(('root-matching', ('<dict><key>IOProviderClass</key><string>IOMedia</string>'
@@ -323,11 +368,18 @@ def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon
             if not re.fullmatch(r'[A-Za-z0-9_.\-]{1,63},[0-9a-fA-F]{1,16},(?:[0-9a-fA-F]{2}){1,16},(?:[0-9a-fA-F]{2}){1,16}', value) or len(value) >= 160:
                 raise Error(f'Malformed text fixup: {value}')
         chosen.append(('text-fixups', b''.join(value.encode() + b'\0' for value in payload['text_fixups'])))
-    chosen += typed_properties(platform.get('chosen', {}))
+    # [adt.chosen]: property tables by type, and any other key as a child node of /chosen (macOS: asmb, the local boot policy).
+    chosen_table = platform.get('chosen', {})
+    chosen += typed_properties({kind: value for kind, value in chosen_table.items() if kind in PROPERTY_TYPES})
+    for child, value in chosen_table.items():
+        if child not in PROPERTY_TYPES and not isinstance(value, dict):
+            raise Error(f'ADT node chosen: {child} is neither a property type nor a child node')
+    chosen_children = [platform_node(child, value) for child, value in chosen_table.items() if child not in PROPERTY_TYPES]
     mappings = [('PackedRAMDisk' if options.get('packed_data_ramdisk') else 'RAMDisk', bytes(16))] if data else []
     mappings += [('TrustCache', bytes(16))] if trust else []
     mappings += [('GpuAddon', bytes(16))] if addon else []
-    children = [node('chosen', chosen, [node('memory-map', mappings), node('manifest-properties')])]
+    mappings += [('RootPolicies', bytes(16))] if root_policies else []
+    children = [node('chosen', chosen, [node('memory-map', mappings), node('manifest-properties'), *chosen_children])]
     cpus = next((entry for entry in root.children if entry.name == 'cpus'), None)
     if cpus is None:
         raise Error('Hardware DTS requires /cpus')
@@ -338,10 +390,17 @@ def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon
         values = registers(entry)
         if len(values) != 1 or values[0][0] > 0xffffffff:
             raise Error(f'{entry.name}: CPU affinity must fit a u32')
-        cpu_nodes.append(node(f'cpu{len(cpu_nodes)}', [('reg', struct.pack('<I', values[0][0])),
-                         ('state', b'running\0' if not cpu_nodes else b'waiting\0'), ('device_type', b'cpu\0'),
-                         ('compatible', entry.properties['compatible']),
-                         ('timebase-frequency', struct.pack('<I', cpus.scalar('timebase-frequency')))]))
+        properties = [('reg', struct.pack('<I', values[0][0])),
+                      ('state', b'running\0' if not cpu_nodes else b'waiting\0'), ('device_type', b'cpu\0'),
+                      ('compatible', entry.properties['compatible']),
+                      ('timebase-frequency', struct.pack('<I', cpus.scalar('timebase-frequency')))]
+        if 'unixnu,cluster-type' in entry.properties:
+            # XNU reads the cluster type as an integer character: 'E' or 'P'.
+            kind = entry.strings('unixnu,cluster-type')
+            if kind not in (['E'], ['P']):
+                raise Error(f'{entry.name}: unixnu,cluster-type must be "E" or "P"')
+            properties.append(('cluster-type', struct.pack('<I', ord(kind[0]))))
+        cpu_nodes.append(node(f'cpu{len(cpu_nodes)}', properties))
     if not cpu_nodes:
         raise Error('Hardware DTS requires an enabled boot CPU')
     children.append(node('cpus', children=cpu_nodes))
@@ -360,9 +419,13 @@ def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon
                          [node(name, hardware_properties(entry, handles, base)) for name, entry in zip(names, hardware)]))
     for name in ('defaults', 'options', 'product', 'buttons'):
         if name in platform or name in ('defaults', 'options', 'product'):
-            children.append(node(name, typed_properties(platform.get(name, {}))))
-    root_properties = [('compatible', root.properties['compatible']), ('#address-cells', struct.pack('<I', 2)),
-                       ('#size-cells', struct.pack('<I', 2)), *typed_properties(platform.get('root', {}))]
+            children.append(platform_node(name, platform.get(name, {})))
+    # A configured root 'compatible' goes before the hardware DTS's own entries: an OS identity's board name comes first (the OS
+    # reads the first entry as the hardware model) and the board's compatible strings stay matchable after it.
+    configured = dict(typed_properties(platform.get('root', {})))
+    compatible = configured.pop('compatible', b'') + root.properties['compatible']
+    root_properties = [('compatible', compatible), ('#address-cells', struct.pack('<I', 2)),
+                       ('#size-cells', struct.pack('<I', 2)), *configured.items()]
     if not any(key == 'model' for key, _ in root_properties):
         root_properties.append(('model', root.properties['model']))
     return node('device-tree', root_properties, children)

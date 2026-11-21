@@ -7,13 +7,18 @@ out/ipsw/<build>/ with their sha256, and checked against the pins of board.toml 
 The board describes the image in [ipsw]: url (the default remote source), product, version, build, device_class,
 chip_id, board_id, and the components the steps use.
 """
+import concurrent.futures
+import contextlib
 import hashlib
+import http.client
 import io
 import json
+import os
 import platform
 import plistlib
 import struct
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -29,16 +34,113 @@ class RangeFile(io.RawIOBase):
     """A read-only seekable view of a remote file, fetched with HTTP range requests and a small block cache."""
 
     def __init__(self, url, block=CHUNK, retries=4):
+        if block <= 0 or retries <= 0:
+            raise ValueError('range block size and attempts must be positive')
         self.url, self.block, self.retries = url, block, retries
         self.position = 0
         self.cache = {}
-        request = urllib.request.Request(url, method='HEAD')
-        with urllib.request.urlopen(request, timeout=60) as response:
-            self.size = int(response.headers['Content-Length'])
-        probe = urllib.request.Request(url, headers={'Range': 'bytes=0-0'})
-        with urllib.request.urlopen(probe, timeout=60) as response:
-            if response.status != 206:
-                raise Error(f'{url} does not support range requests')
+        self._prefetch = None
+        self.size = self._request()
+        self._request(0, 0)
+
+    def _request(self, start=None, end=None, stop=None):
+        """Retry a complete range; truncated bytes never enter the seekable cache."""
+        headers = {'Accept-Encoding': 'identity'}
+        if start is not None:
+            headers['Range'] = f'bytes={start}-{end}'
+        label = 'size query' if start is None else f'bytes {start}-{end}'
+        for attempt in range(self.retries):
+            if stop is not None and stop.is_set():
+                raise concurrent.futures.CancelledError()
+            try:
+                request = urllib.request.Request(self.url, headers=headers, method='HEAD' if start is None else 'GET')
+                with urllib.request.urlopen(request, timeout=30 if stop is not None else 60 if start is None else 120) as response:
+                    if start is None:
+                        try:
+                            size = int(response.headers['Content-Length'])
+                        except (KeyError, TypeError, ValueError) as error:
+                            raise OSError('missing or invalid IPSW Content-Length') from error
+                        if response.status != 200 or size <= 0:
+                            raise OSError('invalid IPSW size response')
+                        return size
+                    expected = end - start + 1
+                    if response.status != 206:
+                        raise OSError('server did not return HTTP 206 for the requested range')
+                    if response.headers.get('Content-Range') != f'bytes {start}-{end}/{self.size}':
+                        raise OSError('Content-Range differs from the requested IPSW range')
+                    length = response.headers.get('Content-Length')
+                    if length is not None and length != str(expected):
+                        raise OSError('Content-Length differs from the requested IPSW range')
+                    if stop is None:
+                        data = response.read(expected + 1)
+                    else:
+                        data = bytearray()
+                        deadline = time.monotonic() + 120
+                        while len(data) < expected:
+                            if stop.is_set():
+                                raise concurrent.futures.CancelledError()
+                            if time.monotonic() >= deadline:
+                                raise TimeoutError('range transfer exceeded 120s')
+                            chunk = response.read1(min(65536, expected - len(data)))
+                            if not chunk:
+                                break
+                            data.extend(chunk)
+                        data = bytes(data)
+                    if len(data) != expected:
+                        raise OSError(f'short range response: received {len(data)} of {expected} bytes')
+                    return data
+            except (OSError, http.client.HTTPException) as error:
+                if isinstance(error, urllib.error.HTTPError):
+                    error.close()
+                    if error.code not in (408, 425, 429, 500, 502, 503, 504):
+                        raise Error(f'IPSW {label} failed: HTTP {error.code} {error.reason}') from error
+                if attempt + 1 == self.retries:
+                    raise Error(f'IPSW {label} failed after {self.retries} attempts: {error}') from error
+                delay = 2 ** attempt
+                log(f'ipsw: warning - {label} - {type(error).__name__}: {error} - '
+                    f'retry {attempt + 2}/{self.retries} in {delay}s')
+                if stop is None:
+                    time.sleep(delay)
+                elif stop.wait(delay):
+                    raise concurrent.futures.CancelledError()
+
+    @contextlib.contextmanager
+    def prefetch(self, start, length, workers=64):
+        """Fetch only the active ZIP member, with at most one queued block per worker."""
+        if not 1 <= workers <= 64 or start < 0 or length < 0 or start + length > self.size:
+            raise Error('invalid IPSW parallel range window')
+        if self._prefetch is not None:
+            raise Error('nested IPSW prefetch windows are not supported')
+        first = start // self.block
+        end = (start + length + self.block - 1) // self.block
+        workers = min(workers, end - first) if length else 1
+        if workers <= 1:
+            yield 1
+            return
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=workers, thread_name_prefix='ipsw-range')
+        state = {'pool': pool, 'stop': threading.Event(), 'pending': {}, 'next': first,
+                 'end': end, 'workers': workers}
+        self._prefetch = state
+        try:
+            self._fill_prefetch()
+            yield workers
+        finally:
+            state['stop'].set()
+            for future in state['pending'].values():
+                future.cancel()
+            pool.shutdown(wait=True, cancel_futures=True)
+            self._prefetch = None
+
+    def _fill_prefetch(self):
+        state = self._prefetch
+        while state['next'] < state['end'] and len(state['pending']) < state['workers']:
+            index = state['next']
+            state['next'] += 1
+            if index in self.cache:
+                continue
+            start = index * self.block
+            end = min(start + self.block, self.size) - 1
+            state['pending'][index] = state['pool'].submit(self._request, start, end, state['stop'])
 
     def readable(self):
         return True
@@ -55,23 +157,18 @@ class RangeFile(io.RawIOBase):
 
     def _block(self, index):
         if index not in self.cache:
-            if len(self.cache) >= 4:
-                self.cache.pop(next(iter(self.cache)))
             start = index * self.block
             end = min(start + self.block, self.size) - 1
-            for attempt in range(self.retries):
-                try:
-                    request = urllib.request.Request(self.url, headers={'Range': f'bytes={start}-{end}'})
-                    with urllib.request.urlopen(request, timeout=120) as response:
-                        data = response.read()
-                    if len(data) != end - start + 1:
-                        raise OSError('short range response')
-                    self.cache[index] = data
-                    break
-                except (OSError, urllib.error.URLError):
-                    if attempt == self.retries - 1:
-                        raise
-                    time.sleep(2 ** attempt)
+            pending = self._prefetch['pending'] if self._prefetch is not None else {}
+            future = pending.get(index)
+            data = future.result() if future is not None else self._request(start, end)
+            if future is not None:
+                del pending[index]
+            if len(self.cache) >= 4:
+                self.cache.pop(next(iter(self.cache)))
+            self.cache[index] = data
+            if future is not None:
+                self._fill_prefetch()
         return self.cache[index]
 
     def readinto(self, buffer):
@@ -102,6 +199,12 @@ class Ipsw:
             raise Error('board.toml has no [ipsw]')
         self.spec = spec or spec_of(ctx)
         self.remote = self.spec.startswith(('http://', 'https://'))
+        try:
+            self.jobs = int(os.environ.get('UNIXNU_IPSW_JOBS', '64'))
+        except ValueError as error:
+            raise Error('UNIXNU_IPSW_JOBS must be an integer in 1..64') from error
+        if not 1 <= self.jobs <= 64:
+            raise Error('UNIXNU_IPSW_JOBS must be in 1..64')
         if self.remote:
             log(f'ipsw: remote {self.spec}')
             self.stream = RangeFile(self.spec)
@@ -157,10 +260,27 @@ class Ipsw:
         partial = destination.with_suffix(destination.suffix + '.partial')
         digest = hashlib.sha256()
         log(f'ipsw: extracting {component} ({name}, {size >> 20} MiB)')
+        started = reported = time.monotonic()
+        done = 0
         with self.zip.open(name) as source, partial.open('wb') as target:
-            while chunk := source.read(CHUNK):
-                target.write(chunk)
-                digest.update(chunk)
+            # ZipFile.open has consumed the local header, so tell() is the first compressed byte.
+            window = (self.stream.prefetch(self.stream.tell(), self.zip.getinfo(name).compress_size, self.jobs)
+                      if isinstance(getattr(self, 'stream', None), RangeFile) else contextlib.nullcontext(1))
+            with window as jobs:
+                if self.remote:
+                    log(f'ipsw: {component} - up to {jobs} parallel ranges - {CHUNK >> 20} MiB per range')
+                while chunk := source.read(CHUNK):
+                    target.write(chunk)
+                    digest.update(chunk)
+                    done += len(chunk)
+                    now = time.monotonic()
+                    if now - reported >= 10 or done == size:
+                        elapsed = max(now - started, 0.001)
+                        speed = done / elapsed
+                        eta = int((size - done) / speed) if speed else 0
+                        log(f'ipsw: {component} - {100 * done / size:.1f}% - {done / (1 << 20):.1f}/{size / (1 << 20):.1f} MiB - '
+                            f'{speed / (1 << 20):.1f} MiB/s - elapsed {int(elapsed)}s - ETA {eta}s')
+                        reported = now
         if partial.stat().st_size != size:
             partial.unlink()
             raise Error(f'incomplete extraction of {name}')
@@ -174,6 +294,75 @@ class Ipsw:
 
     def read(self, component):
         return self.zip.read(self.member(component))
+
+    def disk_image(self, component):
+        """A component as a plain disk image: extracted, then decrypted when the IPSW ships it as AEA."""
+        # AEA inputs may have been removed after decryption. Validate the plain
+        # image and both recorded identities before downloading the archive again.
+        name = self.member(component)
+        for window in self.ctx.board.get('userdata', {}).get('windows', []):
+            if window['component'] != component:
+                continue
+            raw = self.cache / (window['name'] + '.raw.dmg')
+            pin = self.ctx.board.get('root', {}).get(window['name'].lower() + '_image_sha256')
+            if raw.is_file() and pin:
+                if sha256_file(raw) != pin:
+                    raise Error(f'{raw}: raw root image differs from the selected OS profile')
+                return raw
+        if name.endswith('.aea'):
+            archive = self.cache / Path(name).name
+            plain = archive.with_suffix('')
+            record = plain.with_suffix(plain.suffix + '.json')
+            origin = archive.with_suffix(archive.suffix + '.json')
+            if plain.is_file() and record.is_file() and origin.is_file():
+                data, source = json.loads(record.read_text()), json.loads(origin.read_text())
+                pin = self.config.get('sha256', {}).get(archive.name)
+                if source.get('member') == name and data.get('member') == name \
+                        and data.get('aea_sha256') == source.get('sha256') \
+                        and (pin is None or pin == source.get('sha256')) \
+                        and data.get('size') == plain.stat().st_size \
+                        and sha256_file(plain) == data.get('sha256'):
+                    return plain
+        path = self.extract(component)
+        if path.suffix != '.aea':
+            return path
+        return decrypt_aea(path)
+
+
+def decrypt_aea(path):
+    """Decrypt an AEA archive beside it (name without .aea), cached with the sha256 of both files.
+
+    The key is fetched by `ipsw fw aea --key` from the key URL in the archive header and passed to macOS aea;
+    it is not written to disk or the log.
+    """
+    out = path.with_suffix('')
+    record = out.with_suffix(out.suffix + '.json')
+    if out.is_file() and record.is_file():
+        data = json.loads(record.read_text())
+        if data.get('aea_sha256') == json.loads(path.with_suffix(path.suffix + '.json').read_text()).get('sha256') \
+                and data.get('size') == out.stat().st_size:
+            return out
+    if platform.system() != 'Darwin':
+        raise Error(f'{path.name} is AEA encrypted; decrypting it needs macOS /usr/bin/aea')
+    tool('aea', 'macOS /usr/bin/aea decrypts AEA disk images')
+    ipsw = tool('ipsw', 'the ipsw tool fetches the AEA key (brew install blacktop/tap/ipsw)')
+    log(f'ipsw: fetching the AEA key of {path.name}')
+    result = subprocess.run([ipsw, 'fw', 'aea', '--key', str(path)], capture_output=True, text=True)
+    keys = [line.strip() for line in result.stdout.splitlines() if line.strip().startswith('base64:')]
+    if result.returncode or len(keys) != 1:
+        raise Error(f'could not fetch the AEA key of {path.name}: {result.stderr.strip()[-300:]}')
+    partial = out.with_suffix(out.suffix + '.partial')
+    log(f'ipsw: decrypting {path.name}')
+    result = subprocess.run(['/usr/bin/aea', 'decrypt', '-i', str(path), '-o', str(partial), '-key-value', keys[0]],
+                            capture_output=True, text=True)
+    if result.returncode:
+        partial.unlink(missing_ok=True)
+        raise Error(f'aea decrypt of {path.name} failed: {result.stderr.strip()[-300:]}')
+    partial.rename(out)
+    source = json.loads(path.with_suffix(path.suffix + '.json').read_text())
+    record.write_text(json.dumps({'member': source.get('member'), 'aea_sha256': source.get('sha256'),
+                                  'size': out.stat().st_size, 'sha256': sha256_file(out)}, indent=2) + '\n')
+    return out
 
 
 def _der(data, at):

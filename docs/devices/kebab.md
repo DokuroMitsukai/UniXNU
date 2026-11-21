@@ -10,14 +10,14 @@ A community-maintained port for SM8250. Current results are based on the maintai
 
 ## State
 
-The GFander port reaches MMU enablement, `arm_init`, `PE_init_platform` and the early framebuffer console on hardware. KVA mapping and `_enable_timebase_event_stream` diagnostics remain open; the timer reports an invalid bit index.
+The GFander port uses 16 KiB pages and targets iOS 16.7.16. Hardware logs confirm UFS partition publication, an HFS root and execution of a static test init in EL0. The file named `/sbin/launchd` in that test root is the custom test program. Console output, full Apple userland, additional CPUs and USB integration remain in progress.
 
-The stevedang67889 port separately verifies firmware, menu, physical buttons and logs. Kernel and payload builds are recorded; its firmware UFS integration remains pending.
+The stevedang67889 port separately records a working firmware menu, buttons and panel logs. Its kernel, ADT and payload are built; firmware storage integration remains pending.
 
 ## Sources
 
-- [README: GFander/UniXNU-kebab](https://github.com/GFander/UniXNU-kebab/blob/5d609fa28397f352103510eb37efe50b8570737f/README.md)
-- [README: stevedang67889/UniXNU-kebab](https://github.com/stevedang67889/UniXNU-kebab/blob/06dc6ca9704f07b2a7b5922173dba302f3a09f33/README.md)
+- [Boot record: GFander/UniXNU-kebab](https://github.com/GFander/UniXNU-kebab/blob/786f31707708dbde0c4ae9b95784f543113b0314/docs/BRING-UP-STATE.md)
+- [README: stevedang67889/UniXNU-kebab](https://github.com/stevedang67889/UniXNU-kebab/blob/848b04fea469062b48e0eb3799d656bc111b8ce0/README.md)
 
 ## Use this port
 

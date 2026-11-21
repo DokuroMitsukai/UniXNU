@@ -13,6 +13,7 @@ Coryyi 板级文件标识为小米 10S，并记录 SM8250 系列的实测板级�
 
 ## 来源
 
+- [板级配置: tobyfox1640/UniXNU-thyme](https://github.com/tobyfox1640/UniXNU-thyme/blob/8efba539ce54b34e576e71799498d287c6eba894/board.toml)
 - [板级配置: Coryyi/UniXNU-thyme](https://github.com/Coryyi/UniXNU-thyme/blob/8728dc4666759998a7873966bd220702af638fec/board.toml)
 
 ## 使用此移植

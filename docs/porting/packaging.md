@@ -17,7 +17,7 @@ same script text. A board changes `board.toml`, never the script.
    only source. A device repository copies it unchanged. The one board value it
    reads itself is `[package] unixnu`, the path of the UniXNU checkout.
 4. **The build target is a parameter.** One branch serves every OS profile.
-   `--os 17|26|27|PROFILE` selects the profile for the run. The values that differ
+   `--os 17|27|macos-27|PROFILE` selects the profile for the run. The values that differ
    per profile sit in `board.toml` under `[os_overrides."<profile>"]`; there is no
    branch and no second copy of a driver, patch or optimization per target.
 5. **Sources are pinned.** `deps` fetches only the revisions that `feeds.toml`,
@@ -39,7 +39,7 @@ same script text. A board changes `board.toml`, never the script.
 ## Interface
 
 ```sh
-scripts/package.sh [--os 17|26|27|PROFILE] [--no-deps] [--check] [unixnu options]
+scripts/package.sh [--os 17|27|macos-27|PROFILE] [--no-deps] [--check] [unixnu options]
 ```
 
 | Option | Meaning |
@@ -62,13 +62,15 @@ the overrides with the result.
 ## On GitHub
 
 The device repository carries `.github/workflows/package.yml`. It runs
-`scripts/package.sh` on a macOS runner, with the UniXNU and firmware
+`scripts/package.sh` on a macOS runner, with the UniXNU and device UEFI
 checkouts beside the device repository, and offers `boot.img`, `payload.img`,
 `kernel.macho` and `package.manifest.json` as the run's artifacts.
 
 The run installs its tools itself (Homebrew dtc, llvm, lld, cmake, mtools and
-the ipsw tap for the AEA keys) and asserts them before the build; the firmware
-checkout comes with its submodules, the binary modules the volume builds from.
+the ipsw tap for the AEA keys) and asserts them before the build. The board
+names the official firmware archive in board.toml `[firmware.image]`; the run
+downloads it with concurrent HTTP ranges, keeps only the named inputs, deletes
+the archive and generates the binary modules the firmware volume builds from.
 
 Run it in a fork of the device repository:
 
@@ -87,6 +89,7 @@ unixnu = "../UniXNU"
 
 [package.defconfig]
 "ipados-27.0.1-24A446" = "<device>_ipados27_defconfig"
+"macos-27.3-26C5035r" = "<device>_macos_defconfig"
 
 [os_overrides."ipados-17.7.11-21H461".kernel]
 archives = [ ... ]
@@ -129,3 +132,52 @@ Booting the artifacts is a separate step with its own record.
 4. Record the run in the `packaging` area of `porting.toml`.
 
 [Build and boot](/building), [Device repository](/porting/device-repository)
+
+## Runtime inputs for iOS 27
+
+The payload's `runtime` table enables preparation before kernel compilation.
+Apple static/System/App trust modules come from the selected IPSW unchanged. Turnip,
+AdrenoMetal and the board audio HAL are built from source; their CDHashes are
+appended as a separate owner trust module. Wallpaper overlays come from the
+read-only OS image. The official Xiaomi fastboot archive still supplies the
+firmware inputs through the board preflight scripts.
+
+An existing installation must reuse its original `data.dbr` with
+`--data-ramdisk FILE`. GPU and audio updates travel in the addon and do not edit
+that seed. The runtime step checks its APFS volume UUID against the generated
+kernel configuration and records the input SHA-256 values in the package manifest.
+A payload-only build refuses a different Data UUID and asks for a kernel rebuild.
+
+The kernel addon writer sets the replacement file size and mode explicitly.
+Shorter updates remove old tails; identical files skip writes.
+`python3 scripts/check-addon-writer.py` checks this path with simulated VFS
+operations and ASan/UBSan.
+
+For a **first installation**, `scripts/package.sh --os 27 --init-data` creates an
+APFS seed from the IPSW's initial `private/var`, uses the board's `data_gib` and
+Setup preferences, and binds the new UUID into the kernel configuration. This
+writes host build files only; it does not erase or flash a device. Keep the seed
+at `out/<device>/<os_profile>/<config>/runtime/data.dbr` for every later
+build of that installation. Its content identity, not just its UUID, identifies
+the persistent Data store. Regenerating it cannot preserve an older installation.
+
+The package workflow restores this seed from an installation cache, or accepts
+an original seed URL with a required SHA-256. A missing cache stops the build
+unless `init_data` is explicitly selected. The workflow uploads a separate seed
+backup with one-day retention. Download and retain it: Actions caches are not a
+permanent backup. The current device's seed is not supplied by either firmware
+archive. The macOS profile uses the same
+runtime table with `target = "macos27"`. Its seed is made as root with the
+command the build prints, not with `--init-data`; see [macOS profile](/porting/macos#data-seed).
+
+`--gpu-addon FILE` and its matching `--owner-trust-cache FILE` remain available
+for reproducing an existing image. Omit both to compile the addon and generate
+its trust bundle. These generated binaries and installation seeds are not Git
+inputs.
+
+For the 24A446 fileset, `regression_policy` bounds the unresolved references by
+original kernel address and importing component. New gaps fail packaging even
+with `--allow-missing`; this check does not qualify the remaining experimental
+paths or replace a device boot test.
+
+Kernel updates retain the selected profile's signed root headers and public anchor. `scripts/import-root-policies.py BOOT.img --policies PROFILE_POLICY_DIRECTORY` authenticates and imports them from a verified boot image. The sheng macOS lab uses these inputs when `root_storage=false`. A replacement kernel travels with its matching `kernel.macho.vroot` policy bundle.

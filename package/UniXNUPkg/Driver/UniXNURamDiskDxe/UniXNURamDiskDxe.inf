@@ -19,12 +19,14 @@
   DebugLib
   FdtLib
   HobLib
+  MemoryAllocationLib
   UefiBootServicesTableLib
   UefiDriverEntryPoint
 
 [Protocols]
   gEfiBlockIoProtocolGuid                       ## PRODUCES
   gEfiDevicePathProtocolGuid                    ## PRODUCES
+  gEfiDecompressProtocolGuid                    ## CONSUMES
 
 [Pcd]
   gUniXNUPkgTokenSpaceGuid.PcdUniXNURamDiskBase

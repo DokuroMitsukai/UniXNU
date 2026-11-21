@@ -10,20 +10,25 @@
 
 阅读[前置条件](/zh/guide/requirements)，从[设备列表](/zh/devices/)选择移植。
 新设备先按[移植流程](/zh/porting/steps)操作。获取设备和 UEFI 仓库及其 submodule。
-例如 sheng 使用：
+设置目标移植的仓库地址与 defconfig：
 
 ```sh
+DEVICE_REPOSITORY=https://github.com/your-org/UniXNU-myboard
+UEFI_REPOSITORY=https://github.com/your-org/uefi-myboard
+DEFCONFIG=myboard_defconfig
 git clone --recurse-submodules https://github.com/UniXNU/UniXNU
-git clone --recurse-submodules https://github.com/UniXNU/UniXNU-sheng
-git clone --recurse-submodules https://github.com/UniXNU/uefi-sheng
+git clone --recurse-submodules "$DEVICE_REPOSITORY" UniXNU-device
+git clone --recurse-submodules "$UEFI_REPOSITORY" uefi-device
 cd UniXNU
-./unixnu defconfig sheng_defconfig -D ../UniXNU-sheng
+./unixnu defconfig "$DEFCONFIG" -D ../UniXNU-device
 ./unixnu fetch
 ./unixnu status --json
 ```
 
-替换为目标仓库和 defconfig 名称。`status` 显示最终 profile、版本、补丁顺序和输出目录。
+`status` 显示最终 profile、版本、补丁顺序和输出目录。
 `-D` 记录在 `out/state.json`，后续命令均在 UniXNU 主仓库执行。
+`--os VERSION` 为单条命令选择另一个 OS profile。macOS 构建的每条命令都带
+`--os macos-27`，并按 [macOS 配置](/zh/porting/macos)操作。
 
 **预期结果：** 设备/配置选择正确，源码路径已解析。
 
@@ -35,7 +40,7 @@ cp unixnu.example.toml unixnu.local.toml
 
 按[本地构建配置](/zh/reference/configuration#local-build-inputs)填写设备和 UEFI 路径、
 固件 DTB、平台身份及所需 kernelcache、trust-cache 和 Data seed。
-遵循设备输入清单；[sheng 构建输入](/zh/porting/migration#build-inputs)列出其 SDK、固件和 ABI 要求。
+按设备输入清单与[构建输入检查表](/zh/porting/migration#build-inputs)准备 SDK、固件和 ABI 输入。
 
 ```sh
 ./unixnu ipsw info
@@ -56,6 +61,21 @@ cp unixnu.example.toml unixnu.local.toml
 
 前一条成功后再执行下一条。[内核准备](/zh/guide/build-kernel)说明归档、ABI 和预链接要求，
 [固件集成](/zh/porting/uefi-firmware#required-integration)说明必需的 DSC/FDF 模块。
+
+标准 `unixnu` 命令在终端中自动为状态前缀着色：蓝色表示进度，绿色表示完成，
+黄色表示警告，红色表示失败。pip、CMake 和编译器诊断也会着色。重定向、
+`--json`、`NO_COLOR` 和 `TERM=dumb` 保持无色，各步骤日志文件保留纯文本。
+
+源码存储编译在 `<tree>/build/sheng-source-storage/` 保存每个源文件的完整日志，失败时打印末尾 6000 个字符。runtime Metal 库清单使用系统临时目录挂载附加 cryptex，构建输出可以位于已挂载的磁盘镜像中。
+
+同时保存完整命令输出：
+
+```sh
+python3 scripts/build-log.py --log out/build.log -- ./unixnu build kernel
+```
+
+可选包装器返回原命令的退出码。`--color never` 关闭颜色；未设置 `NO_COLOR` 时，
+`--color always` 可在重定向输出中启用颜色。
 
 | 步骤 | 预期输出 |
 | --- | --- |
@@ -150,6 +170,10 @@ cp out/<device>/<os_profile>/<config>/kernel/kernel.macho \
 
 workflow 运行 kernel、userdata 和 payload。package、firmware 和 boot image 命令在受支持的 macOS 或 Linux 主机上执行。使用托管构建前检查 workflow 和账户 runner 配置。
 
+### Sheng macOS lab
+
+[sheng macOS lab workflow](https://github.com/UniXNU/UniXNU-sheng/actions/workflows/macos-lab.yml) 通过 `core_ref` 选择核心仓库版本，默认为 `main`。输入分支、标签或完整的 40 位 commit SHA，与本地核心仓库版本一致即可使用相同源码构建。`root_storage=false` 构建启动镜像，保留设备上已安装的根存储和 Data。
+
 ## Linux 主机
 
 安装脚本在 glibc Linux 上支持 apt、dnf、pacman 和 zypper。依赖已准备好时使用 `--package-manager none`，指定主机 LLVM 时使用 `--llvm-config FILE`。详见 [Linux 要求](/zh/guide/requirements#linux)。
@@ -193,6 +217,7 @@ Linux 路径使用相同的选定 profile、归档配方和预链接检查。随
 | 选项 | 含义 |
 | --- | --- |
 | `-D DIR` | 设备仓库，首次使用后会记住。 |
+| `--os VERSION` | 本次运行的 OS profile：`17`、`26`、`27`、`macos-27` 或 `profiles/os` 目录名，默认取 `board.os_profile`。 |
 | `--out DIR` | 输出根目录，默认是本仓库的 `out/`。 |
 | `-j N` | 并行任务数，默认取 `JOBS` 或 CPU 数量。 |
 | `--target DEBUG\|RELEASE` | EDK II 构建目标，默认 `DEBUG`。 |
@@ -238,6 +263,9 @@ tree/
 ### ipsw
 
 IPSW 按成员读取，远程 IPSW 不会整体下载。zip 目录和需要的成员通过 HTTP range 请求读取。解压的成员缓存在 `out/ipsw/<build>/`，并按 `board.toml [ipsw.sha256]` 的哈希校验。
+
+提取成员时最多并行预取 64 个 8 MiB 分块。通过 `UNIXNU_IPSW_JOBS` 设置 `1..64` 路并发，
+设为 `1` 关闭预取。断流分块重试成功后才写入缓存。日志显示提取进度、速度和预计剩余时间。
 
 镜像必须匹配 `[ipsw]` 的产品、版本、build、device class、chip ID 和 board ID。
 
@@ -285,6 +313,13 @@ package 步骤用 EDK II 构建 `package/`，输出到 `out/<device>/<os_profile
 `--owner-trust-cache` 传入 owner 签名的包，包含原始缓存和额外模块。它替换 `--trust-cache`，并跳过 `[payload] trust_cache_sha256`。
 
 `--skip-setup` 在 `--data-ramdisk` 提供的 Data 种子副本中把 Setup 标记为完成。
+
+macOS 配置（`--os macos-27`）用 `scripts/make-macos-data-seed.py` 从系统卷的
+`/System/Library/Templates/Data` 生成 Data 种子。模板保留文件所有者，所以脚本以 root 运行。缺少种子时
+构建停止并打印 `sudo` 命令，输出路径为 `runtime/data.dbr`。`private/`、`Users/`、`Library/Preferences/` 和
+`Library/Keychains/` 下的文件被复制；模板中的其他文件成为指向系统卷模板中同一文件的符号链接，与 macOS 对
+`Data.symlink-patterns` 路径的处理相同，使种子能放进 payload。之后的构建保留这个种子。内核把它挂载到
+`/System/Volumes/Data`，并设置系统卷 `/usr/share/firmlinks` 中的 firmlink。
 
 ### userdata
 

@@ -1,137 +1,196 @@
 # Devices
 
-A device entry is a pair of repositories and the values that make the generic stack run on that board. The table records the ports with a public repository. Boards with a similar SoC need their own port and their own entry.
+Find device documentation and porting records by codename.
 
-## Select and use a device
+Follow [Build and boot](/building), [porting steps](/porting/steps) and [log capture](/porting/log-capture) for build and validation procedures.
 
-1. Open the target device below and confirm its product, SoC and maintained repositories.
-2. Read its inputs, current results and unfinished areas. Use the firmware, OS profile and partition values specified by that port.
-3. Follow [Build and boot](/building) to build it, [Port a device](/porting/steps) to adapt new hardware, or [Migration](/porting/migration) to update the repository format.
-4. Verify the checkpoints in its record and save the source, firmware and image revisions actually used.
+## Officially maintained
 
-## Organization-maintained devices
-
-| Device | SoC | Support | Device repository | Firmware |
-| --- | --- | --- | --- | --- |
-| [Xiaomi Pad 6S Pro (sheng)](/devices/sheng) | SM8550 | [Implementation and evidence by area](/devices/sheng) | [UniXNU-sheng](https://github.com/UniXNU/UniXNU-sheng) | [uefi-sheng](https://github.com/UniXNU/uefi-sheng) |
-
-## Community ports
-
-Community ports are maintained by the people listed below. Each page distinguishes source, host-build and device results and links their records. Discovery covers the UniXNU organization, the `unixnu` topic, public repositories matching UniXNU in name or description, and existing source links. Entries require target-specific board configuration or implementation.
-
-| Device | SoC | State | Maintainer |
+| Device | Codename | SoC | Repository |
 | --- | --- | --- | --- |
-| [DroidVM guest (crosvm on Gunyah)](/devices/droidvm) | crosvm-gunyah | iPadOS 17 home screen; Metal widgets and icons; keychain and Bluetooth; virtio-net works | Droid-VM |
-| [QEMU virt](/devices/qemu) | QEMU virt | iPadOS 17 home screen and Settings; Metal on the Mac GPU with `--metal` | xVanTuring |
-| [Lenovo Xiaoxin Pad 2022 (tb128fu)](/devices/tb128fu) | SM6225 | iPadOS 17 home screen with touch; Metal frames presented by the GPU; Adreno 610 runs | xVanTuring |
-| [Galaxy Tab S7 FE Wi-Fi (SM-T733)](/devices/sm-t733) | SM7325 | Desktop, touch, UFS, persistent Data and battery reporting | RigoLigoRLC |
-| [OnePlus 10 Pro 5G (negroni)](/devices/negroni) | SM8450 | iOS 16.7.16 SpringBoard with touch; CPU-rendered; Wi-Fi pending | pawlickerr |
-| [Nothing Phone (2) (pong)](/devices/pong) | SM8475 | iOS 16.6.1 home screen with display and touch; UFS and GPU partial | Chengdong-Yu |
-| [Xiaomi 17 Pro (pandora)](/devices/pandora) | SM8850 | Home screen and touch; first GPU frame, interaction hangs | ShueiTsuki |
-| [Xiaomi Mi 8 SE (sirius)](/devices/sirius) | SDM710 | XNU entry and platform expert via U-Boot UEFI; IOKit in progress | 57UU |
-| [Xiaomi 13 (fuxi)](/devices/fuxi) | SM8550 | Kernel links and prelinks; stage B archive chain near complete; no hardware run | matejkoo217, hanzi123-bilp |
-| [OnePlus 7 Pro (guacamole)](/devices/guacamole) | SM8150 | iOS 16.7.16 userland reached; GPU pending | wochgn |
-| [OnePlus Ace 5 (giulia)](/devices/giulia) | SM8650 | Hello/Setup, display, touch and keys; GPU, Wi-Fi and audio pending | tycykp |
-| [Xiaomi Mi 10 (umi)](/devices/umi) | SM8250 | iPadOS 17.7.11 Hello/Setup with touch; CPU display, UFS and persistent Data | reAAAq |
-| [Xiaomi MIX 2 (chiron)](/devices/chiron) | SDM835 | Minimal 4 KiB XNU and PID 1 heartbeat on hardware | to-mid |
-| [Xiaomi Pad 7 / POCO Pad X1 (uke)](/devices/uke) | SM7675 | Apple logo and early userland; reboot under investigation | Allenwdk |
-| [POCO X7 / Redmi Note 14 Pro 5G (malachite)](/devices/malachite) | MT6878 | UEFI works, UFS works, XNU rootfs loaded; USB, touch and the rest not implemented | ghidgdsr |
-| [Brave Ark tablet (braveark)](/devices/braveark) | SM8635 | XNU BSD init on 8 CPUs; iPadOS root in progress | tattwamashi |
-| [Xiaomi Pad 8 Pro (piano)](/devices/piano) | SM8750 | Kernel builds and prelinks in CI; not run on the tablet | code002-2 |
-| [Xiaomi 13 Pro (nuwa)](/devices/nuwa) | SM8550 | Hardware XNU output through IODTNVRAM; reboot under investigation | wh1stl3 |
-| [OnePlus 13T (oneplus13t)](/devices/oneplus13t) | SM8750 | Root and system UI on hardware; touch pending | IssacL04 |
-| [OnePlus Pad 2 Pro (erhai)](/devices/erhai) | SM8750 | XNU entry bring-up; root and userland not configured | wally001012-cyber |
-| [OPPO Find X7 Ultra (PHY120)](/devices/phy120) | SM8650 | Boot manager menu works; kernel builds in CI | peiyuesheng666 |
-| [Sony Xperia 1 II (pdx203)](/devices/pdx203) | SM8250 | Kernel builds and prelinks in CI; not booted | chardidathing |
-| [Moto Z2 Force (nash)](/devices/nash) | MSM8998 | Board configuration and early ARM patches; target hardware evidence pending | fcxuhaq3 |
-| [Redmi K40 Pro (haydn)](/devices/haydn) | SM8350 | Firmware, payload and boot image built; haydn4 imported from guacamole | xiaomi-haydn-dev |
-| [Xiaomi Pad 5 (nabu)](/devices/nabu) | SM8150 | launchd exec returns ENOENT; Linux kernel builds | Lux12138 |
-| [OnePlus 6T (fajita)](/devices/fajita) | SDM845 | XNU reaches root mount; no storage driver | johnpanos |
-| [Xiaomi Mi 8 (dipper)](/devices/dipper) | SDM845 | UEFI, menu and payload; XNU reaches BSD init, no root | hanyaa380 |
-| [Microsoft Surface Duo 2 (zeta)](/devices/zeta) | SM8350 | APFS root and rewritten PID 1; shared-cache pointer fault | none24smu |
-| [OnePlus Ace 5 Pro (hummer)](/devices/hummer) | SM8750 | Six CPUs and panel checkpoints; root-device wait | 2426120557 |
-| [Xiaomi 10 Ultra (cas)](/devices/cas) | SM8250 | UEFI and UniXNU menu verified; DarwinBoot and XNU not tested | ht94911 |
-| [Xiaomi 15 (dada)](/devices/dada) | SM8750 | UEFI works; UFS UIC and MCQ probes; UniXNU and XNU not run | 7Night-kqx |
-| [Redmi Note 14 Pro+ 5G (amethyst)](/devices/amethyst) | SM7635 | Board and kernel config with legacy display; no hardware run documented | andr0d1v |
-| [Redmi K90 Pro Max / Poco F8 Ultra (myron)](/devices/myron) | SM8850 | Core and driver forks; device repository and hardware result pending | zg7681 |
-| [Redmi K70 (vermeer)](/devices/vermeer) | SM8550 | Platform kernel CI passes; hardware UEFI menu verified | mansar1337, yyx2025, wuan0039, xyyyds0106 |
-| [Nubia RedMagic 8 Pro / 8 Pro+ (nx729j)](/devices/nx729j) | SM8550 | NativeUfs and SMMU group in the device repository; runtime not documented | 2713385115 |
-| [Xiaomi Pad 6 (pipa)](/devices/pipa) | SM8250 | Hardware XNU boot; root mount fails, storage integration pending | xVanTuring |
-| [Galaxy Tab A7 10.4 (gta4l)](/devices/gta4l) | SM6115 | Board, ADT and firmware build; second repository builds a kernel in CI | NoNameBuilder, ilovemykedi |
-| [Redmi Note 10 Pro (sweet)](/devices/sweet) | SM7150 | Kernel and platform builds; QEMU CPU/timer checks; device integration pending | CrackerCat |
-| [Xiaomi Mi MIX 2S (polaris)](/devices/polaris) | SDM845 | Platform stage verified on hardware: firmware, UniXNU, DarwinBoot and the source kernel through BSD/IOKit; no root yet | luuu20309 |
-| [OnePlus 5 (cheeseburger)](/devices/cheeseburger) | MSM8998 | Root, PID 1 and RAM Data; watchdogd SIGTRAP under investigation | DinnerABC, lss717 |
-| [Redmi K20 Pro / Mi 9T Pro (raphael)](/devices/raphael) | SM8150 | Public source access pending; current build and device state unconfirmed | penYo22 |
-| [Galaxy Z Fold3 (q2q)](/devices/q2q) | SM8350 | Source kernel build harness only | agcarbajo |
-| [Redmi K30 5G (picasso)](/devices/picasso) | SM7250 | UEFI and XNU boot; root and GPU pending | YinCQL |
-| [Redmi Note 9 (merlinx)](/devices/merlinx) | MT6768 | UEFI boots and custom menu works; storage init blocks UniXNU and XNU | Dracen-W |
-| [Xiaomi Mi Pad 4 LTE (clover)](/devices/clover) | SDM660 | mockfs RAM root and EL0 test init; process diagnostics in progress | qine233 |
-| [Benesse TAB-A04-BR3 (a04br3)](/devices/a04br3) | MT8167 | Board, firmware, eMMC and GPT prepared; no hardware run | mouseos |
-| [Redmi 9A (dandelion)](/devices/dandelion) | MT6765 | Early bring-up; UEFI port in progress | licg89 |
-| [Xiaomi Mi 6 (sagit)](/devices/sagit) | MSM8998 | Public source access pending; current build and device state unconfirmed | dmnakzkahziamnk-a11y |
-| [Redmi Note 12 Turbo / POCO F5 (marble)](/devices/marble) | SM7475 | Public source access pending; current build and device state unconfirmed | Enmmmmn |
-| [Xiaomi Mi 10S (thyme)](/devices/thyme) | SM8250-AC | Measured board inputs and early traces; hardware boot evidence pending | tobyfox1640, Coryyi |
-| [Redmi K80 Ultra (dali)](/devices/dali) | MT6991 | Single-core XNU early boot; root and userland out of scope | localhosts-A |
-| [ZTE Nubia Z60 Ultra (nx721j)](/devices/nx721j) | Pineapple | Pineapple kernel and passive UFS probe; device boot pending | SangLuoCN |
-| [Unisoc UMS512 / T610YP](/devices/t610yp) | UMS512 | Board, kernel config and ADT; no hardware result | hxzbaka |
-| [Google Pixel 9 Pro XL (komodo)](/devices/komodo) | Tensor G4 | Menu and borrowed-kernel entry probes on hardware; native platform pending | Trijal08 |
-| [Xiaomi Mi 9 (cepheus)](/devices/cepheus) | SDM855 | Device repository and boot chain prepared; no hardware result | sxl47 |
-| [Xiaomi MIX Flip (ruyi)](/devices/ruyi) | SM8650 | Board, kernel configuration and firmware repository; hardware results pending | ArnoDorian123 |
-| [Xiaomi Civi 5 Pro (luming)](/devices/luming) | SM8735 | Measured inputs and host ADT checks; kernel and firmware builds pending | infinityEX-RSXQ |
-| [Xiaomi Pad 6 Pro (liuqin)](/devices/liuqin) | SM8475 | Board, defconfig and kernel USB debug port; UEFI next | 1696108518 |
-| [Xiaomi Pad 5 Pro 5G (enuma)](/devices/enuma) | SM8250-AC | Prelink, ADT and FAT payload pass host checks; device boot pending | wh1stl3, Tlrenhb |
-| [Redmi Turbo 3 / Poco F6 (peridot)](/devices/peridot) | SM8635 | WIP device repositories; no hardware result | kvfsrl, hoshikv |
-| [OnePlus 8 Pro (instantnoodlep)](/devices/instantnoodlep) | SM8250 | UEFI platform and kernel baseline; status not documented | zhangp996 |
-| [OnePlus 8T (kebab)](/devices/kebab) | SM8250 | XNU platform and early console; mapping and timer issues | GFander |
-| [OnePlus 6 (enchilada)](/devices/enchilada) | SDM845 | Device repository; status not documented | keyfan |
-| [OnePlus 15T (fairlady)](/devices/fairlady) | SM8850 | Early port with S1 to S6 diagnostics; no hardware result | Osilvfe |
-| [OnePlus Pad Pro (caihong)](/devices/caihong) | SM8650 | APFS restore RAM root and launchd; display and full system root pending | Axiang-dev |
-| [Nothing Phone (3a) (asteroids)](/devices/asteroids) | SM7635 | Eight CPUs, UFS root and userland; display presentation pending | rootstockos |
-| [Galaxy Tab S9 Ultra Wi-Fi (gts9uwifi)](/devices/gts9uwifi) | SM-X910 | Device repository; status not documented | zc47796741-pixel |
-| [Moto G9 Play (guamp)](/devices/guamp) | SM6115 | UEFI menu boots; kernel not built | itsChris122 |
-| [Moto G 5G (gauguin)](/devices/gauguin) | SM7125 | Device repository; status not documented | lvyufeng |
-| [Microsoft Lumia 950](/devices/lumia950) | MSM8992 | Device repository; uses the phone's own UEFI; no boot | ManGuy-Legend |
-| [OPPO R11 (r11)](/devices/r11) | SDM660 | Board, defconfig and hardware notes; status not documented | huhaitao1136-cpu |
-| [OPPO Find X9 (x9)](/devices/x9) | MT6993 | UEFI not reached; about 25 to 30 percent | tosasitill |
-| [Unisoc devices](/devices/unisoc) | Unisoc | Core fork; no device-specific port yet | hxzbaka |
-| [unixnu-build](/devices/unixnu-build) | build tree | Build tree only; device not documented | iskssksjjsjjzjs |
-| [macOS on sheng](/devices/sheng-macos) | SM8550 | macOS 26.5 userland in QEMU; sheng UEFI EL1 probe | Jelly10086 |
-| [Redmi K40 (alioth)](/devices/alioth) | SM8250-AC | Format 2 board, DTS and SM8250 shared support; kernel and image integration pending | FFT-infra |
-| [Lenovo Xiaoxin Pad Pro 2021 (j716f)](/devices/j716f) | SM8250 | Hardware menu, keys, RAM FAT and DarwinBoot protocol checks; XNU entry pending | Denis0x00 |
-| [Lenovo Legion Y700 Gen 4 (elden)](/devices/elden) | SM8750P | Two RAM boots verify menu, GOP, keys and FAT; XNU image pending | jerry-2009 |
-| [Xiaomi Pad 5 Pro Wi-Fi (elish)](/devices/elish) | SM8250-AC | Board scaffold passes static checks; measured inputs and firmware pending | hpadmx |
-| [Redmi K80 (zorn)](/devices/zorn) | SM8650-AB | XNU and APFS restore RAM root; launchd loading stops at PARSE | kerrinz |
-| [OnePlus 9R (lemonades)](/devices/lemonades) | SM8250-AC | Firmware builds on Linux; board and payload preparation; hardware checks pending | soooink |
-| [Meizu 20 Classic (m2381)](/devices/m2381) | SM8550 | Device configuration and firmware overlay; kernel/prelink bring-up | RiverKawa271828 |
+| [Xiaomi Pad 6S Pro \(sheng\)](/devices/sheng) | sheng | SM8550 | [UniXNU/UniXNU-sheng](https://github.com/UniXNU/UniXNU-sheng) |
 
-## What a device page records
+## Community devices
 
-| Item | Example |
-| --- | --- |
-| Board identity | Product name, SoC, codename |
-| IPSW | Product, version, build, device class, chip and board ID |
-| Partition geometry | `first_lba`, `last_lba`, block size |
-| Kernel prelink | Slide, roots, early security initializer, kernelcache pin |
-| Firmware | Mu-Silicium config, DSC, firmware volume path, defines |
-| Payload | Volume label, size, DRAM size, kernel arguments |
-| ADT | Generator script, identity, CPU registers, PSCI method |
-| Device tree additions | Reserved memory nodes for the stock bootloader |
-| Build commands | The exact driver commands |
-| Boot commands | The exact fastboot commands |
-| Observed state | Which stages have run on the device |
+| Device | Codename | SoC | Sources |
+| --- | --- | --- | --- |
+| [Benesse TAB-A04-BR3](/devices/models/a04br3) | a04br3 | MT8167 | 1 |
+| [OnePlus Ace 6 PLQ110 \(OP6113L1\): SM8750 Sun v1, 12 GiB, AA605 panel, S3910 touch](/devices/models/ace6) | ace6 | SM8750 | 1 |
+| [Redmi K40](/devices/models/alioth) | alioth | SM8250 | 6 |
+| [LG G8 ThinQ \(LM-G820, alphalm\)](/devices/models/alphaplus) | alphaplus | SM8150 | 1 |
+| [Redmi Note 14 Pro+ 5G](/devices/models/amethyst) | amethyst | SM7635 | 2 |
+| [Xiaomi Mi Mix 3 5G](/devices/models/andromeda) | andromeda | SM8150 | 2 |
+| [Xiaomi Mi 10T / Mi 10T Pro / Redmi K30S Ultra \(apollo\), SM8250](/devices/models/apollo) | apollo | SM8250 | 2 |
+| [Nothing Phone \(3a\)](/devices/models/asteroids) | asteroids | SM7635 | 2 |
+| [OnePlus Ace 3 PJE110](/devices/models/aston) | aston | SM8550 | 1 |
+| [Xiaomi MIX Fold 3](/devices/models/babylon) | babylon | SM8550 | 1 |
+| [BBK/EEBBK A2, X2 and X2P tablet \(ums512\_1h190, Unisoc T610 / UMS512 SharkL5Pro\)](/devices/models/bbk-a2) | bbk-a2 | UMS512 | 1 |
+| [Google Pixel 6a \(Tensor G1\)](/devices/models/bluejay) | bluejay | GS101 | 1 |
+| [Brave Ark tablet](/devices/models/braveark) | braveark | SM8635 | 1 |
+| [OnePlus Pad Pro](/devices/models/caihong) | caihong | SM8650 | 3 |
+| [Redmi Note 10 5G](/devices/models/camellia) | camellia | MT6833 | 1 |
+| [Xiaomi 10 Ultra](/devices/models/cas) | cas | SM8250 | 2 |
+| [Xiaomi Mi 9](/devices/models/cepheus) | cepheus | SM8150 | 4 |
+| [OnePlus 5](/devices/models/cheeseburger) | cheeseburger | MSM8998 | 3 |
+| [Xiaomi MIX 2](/devices/models/chiron) | chiron | MSM8998 | 2 |
+| [Xiaomi Mi Pad 4 LTE](/devices/models/clover) | clover | SDM660 | 2 |
+| [Xiaomi Mi 10 Pro \(cmi\) / SM8250](/devices/models/cmi) | cmi | SM8250 | 1 |
+| [Xiaomi 12](/devices/models/cupid) | cupid | SM8450 | 2 |
+| [Samsung Galaxy Note10 5G \(SM-N971N, d1x, Exynos 9825\), 12 GB / 256 GB](/devices/models/d1x) | d1x | exynos9825 | 1 |
+| [Samsung Galaxy Note10+ 5G \(SM-N9760\)](/devices/models/d2xq) | d2xq | SM8150 | 1 |
+| [Xiaomi 15](/devices/models/dada) | dada | SM8750 | 1 |
+| [Redmi K80 Pro](/devices/models/dada2) | dada2 | SM8750 | 2 |
+| [Xiaomi Pad 5 Pro 12.4 \(dagu\), China-region Wi-Fi model 22081281AC, SM8250-AC, iPadOS 17.7.11 / arm64 target](/devices/models/dagu) | dagu | SM8250-AC | 1 |
+| [Redmi K80 Ultra](/devices/models/dali) | dali | MT6991 | 2 |
+| [Redmi 9A](/devices/models/dandelion) | dandelion | MT6765 | 1 |
+| [Huawei MatePad 11](/devices/models/dby-w09) | dby-w09 | SM8250 | 1 |
+| [Xiaomi Mi 8](/devices/models/dipper) | dipper | SDM845 | 1 |
+| [Redmi K50 Ultra \(diting/SM8475\): UniXNU bring-up from the Pong baseline](/devices/models/diting) | diting | SM8475 | 3 |
+| [Xiaomi Redmi Pad Pro \(dizi\); ruan unverified](/devices/models/dizi) | dizi | SM7435 | 1 |
+| [OnePlus 13 CPH2653: iPhone iOS 16 source preparation](/devices/models/dodge) | dodge | SM8750 | 2 |
+| [DroidVM guest \(crosvm on Gunyah\)](/devices/models/droidvm) | droidvm | crosvm-gunyah | 3 |
+| [OnePlus 5T](/devices/models/dumpling) | dumpling | MSM8998 | 1 |
+| [Rongyue E5](/devices/models/e5) | e5 | UMS9621 | 1 |
+| [Lenovo Legion Y700 Gen 4](/devices/models/elden) | elden | SM8750P | 3 |
+| [Xiaomi Pad 5 Pro Wi-Fi](/devices/models/elish) | elish | SM8250-AC | 1 |
+| [OnePlus 6](/devices/models/enchilada) | enchilada | SDM845 | 5 |
+| [Xiaomi Pad 5 Pro 5G](/devices/models/enuma) | enuma | SM8250, SM8250-AC | 3 |
+| [OnePlus Pad 2 Pro](/devices/models/erhai) | erhai | SM8750 | 3 |
+| [Rockchip RK3588 EVB10 V10](/devices/models/evb10) | evb10 | RK3588 | 1 |
+| [OnePlus 15T](/devices/models/fairlady) | fairlady | SM8850 | 1 |
+| [OnePlus 6T](/devices/models/fajita) | fajita | SDM845 | 2 |
+| [LG V50 ThinQ \(LM-V500, flashlm\)](/devices/models/flashlm) | flashlm | SM8150 | 1 |
+| [Xiaomi 13](/devices/models/fuxi) | fuxi | SM8550 | 18 |
+| [Gree G0245D \(格力手机 / 色界\)](/devices/models/g0245d) | g0245d | msm8996 | 2 |
+| [Gree G0345D \(格力手机 G3\)](/devices/models/g0345d) | g0345d | msm8996 | 1 |
+| [Preliminary garnet bring-up; not bootable](/devices/models/garnet) | garnet | SM7435 | 1 |
+| [Motorola Moto G 5G](/devices/models/gauguin) | gauguin | SM7225 | 1 |
+| [OnePlus Ace 5](/devices/models/giulia) | giulia | SM8650 | 2 |
+| [Xiaomi Mi 9 SE](/devices/models/grus) | grus | SDM710 | 1 |
+| [Samsung Galaxy Tab A7 10.4](/devices/models/gta4l) | gta4l | SM6115 | 3 |
+| [Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\)](/devices/models/gtaxllte) | gtaxllte | Exynos 7870 | 1 |
+| [Samsung Galaxy Tab S7 FE Wi-Fi \(SM-T733\)](/devices/models/gts7fewifi) | gts7fewifi | SM7325 | 1 |
+| [Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970, gts7xlwifi\): iPadOS desktop, 8 cores, GPU, touch, USB console, battery](/devices/models/gts7xlwifi) | gts7xlwifi | SM8250 | 1 |
+| [Samsung Galaxy Tab S9 Ultra 5G](/devices/models/gts9u) | gts9u | SM8550 | 1 |
+| [Samsung Galaxy Tab S9 Ultra Wi-Fi](/devices/models/gts9uwifi) | gts9uwifi | SM8550 | 1 |
+| [OnePlus 7 Pro](/devices/models/guacamole) | guacamole | SM8150 | 1 |
+| [Motorola Moto G9 Play](/devices/models/guamp) | guamp | SM6115 | 1 |
+| [Motorola Moto E32 \(XT2227-1\), Unisoc UMS9230 / Tiger T606](/devices/models/hawaii) | hawaii | UMS9230 | 1 |
+| [Redmi K40 Pro](/devices/models/haydn) | haydn | SM8350 | 3 |
+| [Samsung Galaxy S7 Edge](/devices/models/hero2lte) | hero2lte | Exynos 8890 | 1 |
+| [OnePlus 7T Pro \(HD1910/HD1911/HD1913\)](/devices/models/hotdog) | hotdog | SM8150 | 1 |
+| [Xiaomi 14](/devices/models/houji) | houji | SM8650 | 4 |
+| [OnePlus Ace 5 Pro](/devices/models/hummer) | hummer | SM8750 | 2 |
+| [OnePlus 8 Pro](/devices/models/instantnoodlep) | instantnoodlep | SM8250 | 3 |
+| [Xiaomi 13 Ultra](/devices/models/ishtar) | ishtar | SM8550 | 3 |
+| [Lenovo Xiaoxin Pad Pro 2021](/devices/models/j716f) | j716f | SM8250 | 2 |
+| [LG V35 ThinQ](/devices/models/judyp) | judyp | SDM845 | 1 |
+| [OnePlus 8T](/devices/models/kebab) | kebab | SM8250 | 3 |
+| [Xiaomi Redmi Note 3 \(Kenzo\) Snapdragon 650](/devices/models/kenzo) | kenzo | MSM8956 | 1 |
+| [Google Pixel 9 Pro XL](/devices/models/komodo) | komodo | zumapro | 1 |
+| [realme GT8 Pro \(lafa\) RMX5200: UniXNU bring-up](/devices/models/lafa) | lafa | SM8850 | 1 |
+| [Xiaomi Redmi Note 7 \(eMMC, 4 GB DRAM, 1080x2340 panel\)](/devices/models/lavender) | lavender | SDM660 | 1 |
+| [OnePlus 9R](/devices/models/lemonades) | lemonades | SM8250 | 1 |
+| [Xiaomi Pad 6 Pro](/devices/models/liuqin) | liuqin | SM8475 | 3 |
+| [Redmi K30 Pro Zoom Edition](/devices/models/lmipro) | lmipro | SM8250 | 2 |
+| [Microsoft Lumia 950](/devices/models/lumia950) | lumia950 | MSM8992 | 4 |
+| [Xiaomi Civi 5 Pro](/devices/models/luming) | luming | SM8735 | 2 |
+| [Meizu 20 Classic](/devices/models/m2381) | m2381 | SM8550 | 2 |
+| [POCO X7 / Redmi Note 14 Pro 5G](/devices/models/malachite) | malachite | MT6878 | 1 |
+| [Redmi Note 12 Turbo / POCO F5](/devices/models/marble) | marble | SM7475 | 4 |
+| [Meizu 15 \(M8810, eMMC, 4 GB DRAM, 1080x1920 AMOLED panel\)](/devices/models/meizu15) | meizu15 | SDM660 | 1 |
+| [Meizu 21 \(M461Q\)](/devices/models/meizu21) | meizu21 | SM8650 | 2 |
+| [Xiaomi Redmi Note 9](/devices/models/merlinx) | merlinx | MT6768 | 2 |
+| [LG G8X ThinQ \(LM-G850, mh2lm\)](/devices/models/mh2lm) | mh2lm | SM8150 | 1 |
+| [Xiaomi Redmi Note 9S / 9 Pro / Note 10 Lite / POCO M2 Pro](/devices/models/miatoll) | miatoll | SM7125 | 1 |
+| [Redmi K80 Pro](/devices/models/miro) | miro | SM8750 | 1 |
+| [Redmi K60 \(mondrian/SM8475\): UniXNU UEFI bring-up](/devices/models/mondrian) | mondrian | SM8475 | 6 |
+| [Xiaomi Redmi K40S \(munch, 22021211RC\)](/devices/models/munch) | munch | SM8250 | 3 |
+| [Xiaomi Pad 7 Pro](/devices/models/muyu) | muyu | SM8635 | 3 |
+| [Redmi K90 Pro Max / Poco F8 Ultra](/devices/models/myron) | myron | SM8850 | 2 |
+| [Xiaomi Pad 5](/devices/models/nabu) | nabu | SM8150 | 9 |
+| [Motorola Moto Z2 Force](/devices/models/nash) | nash | MSM8998 | 1 |
+| [OnePlus 10 Pro 5G](/devices/models/negroni) | negroni | SM8450 | 1 |
+| [MOTO Edge S \(XT2125-4\) / SM8250-AC UniXNU bring-up](/devices/models/nio) | nio | SM8250 | 1 |
+| [Xiaomi 13 Pro](/devices/models/nuwa) | nuwa | SM8550 | 4 |
+| [ZTE Nubia Z60 Ultra](/devices/models/nx721j) | nx721j | Pineapple | 1 |
+| [Nubia RedMagic 8 Pro / 8 Pro+](/devices/models/nx729j) | nx729j | SM8550 | 1 |
+| [nubia RedMagic 9 Pro / 9 Pro+ / 9S Pro / 9S Pro+ \(NX769J\)](/devices/models/nx769j) | nx769j | SM8650 | 2 |
+| [Xiaomi Mi MIX 4 \(odin, Snapdragon 888+ / SM8350\)](/devices/models/odin) | odin | SM8350 | 3 |
+| [AYN Odin 3 \(Dragonwing Q8, SM8750\), 16 GiB](/devices/models/odin3) | odin3 | SM8750 | 1 |
+| [Xiaomi Redmi 7 / Redmi Y3 \(onclite\), Qualcomm MSM8953 Snapdragon 632, 3 GiB RAM](/devices/models/onclite) | onclite | MSM8953 | 1 |
+| [OnePlus 13T](/devices/models/oneplus13t) | oneplus13t | SM8750 | 2 |
+| [Redmi Turbo 4 Pro](/devices/models/onyx) | onyx | SM8735 | 1 |
+| [OPPO Pad mini 5G \(OPD2515, SM8845P / Alor\)](/devices/models/opd2515) | opd2515 | SM8845 | 1 |
+| [Orange Pi 5 Plus \(RK3588, 8 GB, SD only, HDMI only\)](/devices/models/opi5plus) | opi5plus | RK3588 | 1 |
+| [Orange Pi 5 \(Rockchip RK3588S\)](/devices/models/orangepi5) | orangepi5 | RK3588 | 1 |
+| [Xiaomi 17 Pro](/devices/models/pandora) | pandora | SM8850 | 1 |
+| [Google Pixel 7 \(Tensor G2\)](/devices/models/panther) | panther | gs201 | 1 |
+| [OPPO Reno Ace \(PCLM10 / Project 19081, Snapdragon 855+ SM8150-AC\)](/devices/models/pclm10) | pclm10 | SM8150 | 1 |
+| [vivo iQOO Neo 855 \(V1936A, PD1936\), SM8150 v2, 1080x2340 AMOLED @62Hz, UFS 3.x](/devices/models/pd1936) | pd1936 | SM8150 | 1 |
+| [vivo iQOO 7 V2049A early XNU bring-up](/devices/models/pd2049) | pd2049 | SM8350 | 1 |
+| [Sony Xperia 1 II](/devices/models/pdx203) | pdx203 | SM8250 | 2 |
+| [Redmi Turbo 3 / Poco F6](/devices/models/peridot) | peridot | SM8635 | 4 |
+| [OPPO Find X7 Ultra \(PHY120\)](/devices/models/phy120) | phy120 | SM8650 | 1 |
+| [Xiaomi Pad 8 Pro](/devices/models/piano) | piano | SM8750 | 5 |
+| [Redmi K30 5G](/devices/models/picasso) | picasso | SM7250 | 9 |
+| [Xiaomi Pad 6](/devices/models/pipa) | pipa | SM8250 | 5 |
+| [OnePlus Ace 3 \(PJE110\)](/devices/models/pje110) | pje110 |  | 1 |
+| [OPPO Find X9 Ultra](/devices/models/pma120) | pma120 | SM8850 | 1 |
+| [Xiaomi Mi MIX 2S](/devices/models/polaris) | polaris | SDM845 | 4 |
+| [Nothing Phone \(2\)](/devices/models/pong) | pong | SM8250, SM8475 | 6 |
+| [Xiaomi 17 \(pudding, qcom,canoe, SM8850\)](/devices/models/pudding) | pudding | SM8850 | 1 |
+| [Xiaomi Mi 9 Lite](/devices/models/pyxis) | pyxis | SDM710 | 1 |
+| [Galaxy Z Fold3](/devices/models/q2q) | q2q | SM8350 | 1 |
+| [QEMU virt](/devices/models/qemu) | qemu | QEMU virt | 1 |
+| [OPPO R11](/devices/models/r11) | r11 | SDM660 | 2 |
+| [Samsung Galaxy S20 FE](/devices/models/r8q) | r8q | SM8250 | 1 |
+| [Redmi K20 Pro / Mi 9T Pro](/devices/models/raphael) | raphael | SM8150 | 6 |
+| [Realme 5 Pro](/devices/models/rmx1971) | rmx1971 | SDM710 | 1 |
+| [realme GT2 Master Explorer \(RMX3551\): UniXNU UEFI bring-up](/devices/models/rmx3551) | rmx3551 | SM8475 | 1 |
+| [realme GT5 240W \(RMX3823\), kalama, 24 GiB, 1240x2772 AMOLED](/devices/models/rmx3823) | rmx3823 | SM8550 | 1 |
+| [Redmi Turbo 4 / POCO X7 Pro \(rodin\): Dimensity 8400-Ultra, 8/12/16 GiB LPDDR5X, 6.67" AMOLED 1220x2712, UFS](/devices/models/rodin) | rodin | MT6899, mt6899 | 2 |
+| [Xiaomi Redmi K70 Ultra \(rothko, MediaTek Dimensity 9300\)](/devices/models/rothko) | rothko | MT6989 | 1 |
+| [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/devices/models/ruby) | ruby | MT6877 | 1 |
+| [Xiaomi MIX Flip](/devices/models/ruyi) | ruyi | SM8650 | 3 |
+| [Xiaomi Mi 6](/devices/models/sagit) | sagit | MSM8998 | 3 |
+| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 57 |
+| [Xiaomi Pad 6S Pro \(macOS\)](/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
+| [Xiaomi 14 Pro 23116PN5BC](/devices/models/shennong) | shennong | SM8650 | 4 |
+| [Xiaomi Mi 8 SE](/devices/models/sirius) | sirius | SDM710 | 4 |
+| [Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970, gts7xlwifi\), single-core platform bootstrap](/devices/models/sm-t970) | sm-t970 | SM8250 | 1 |
+| [REDMI K100 Pro Max \(songyuan, SM8850 Canoe\)](/devices/models/songyuan) | songyuan | SM8850 | 4 |
+| [Samsung Galaxy S9 \(starlte, SM-G960F, Exynos 9810\): HakiOS, iOS 16.5 on XNU; not built on the UniXNU tree](/devices/models/starlte) | starlte | Exynos 9810 | 1 |
+| [Redmi Note 10 Pro](/devices/models/sweet) | sweet | SM7150 | 2 |
+| [Unisoc UMS512 / T610YP](/devices/models/t610yp) | t610yp | unisoc-ums512-sharkl5pro-t610yp | 1 |
+| [Lenovo Xiaoxin Pad 2022](/devices/models/tb128fu) | tb128fu | SM6225 | 2 |
+| [Lenovo Xiaoxin Pad 12.1 \(2025\), Lenovo TB365FC \(board cava\_prc\_consumer\_wifi\)](/devices/models/tb365fc) | tb365fc | MT6835 | 1 |
+| [Lenovo Xiaoxin Pad Pro 12.7 \(2023\) / TB371FC](/devices/models/tb371fc) | tb371fc | SM8250 | 1 |
+| [Lenovo TB375FC \(MT6897 / MT8792\)](/devices/models/tb375fc) | tb375fc | MT6897 | 1 |
+| [Lenovo Xiaoxin Pad Pro GT \(TB710FU\)](/devices/models/tb710fu) | tb710fu | SM8650, SM8650Q-AB | 2 |
+| [Xiaomi 12S Ultra \(thor\): UniXNU UEFI bring-up](/devices/models/thor) | thor | SM8475 | 1 |
+| [Xiaomi Mi 10S](/devices/models/thyme) | thyme | SM8250 | 2 |
+| [Motorola moto s30 pro](/devices/models/tundra) | tundra | SM8350 | 1 |
+| [OnePlus Ace 2 / 11R](/devices/models/udon) | udon | SM8475 | 1 |
+| [Xiaomi Pad 7 / POCO Pad X1](/devices/models/uke) | uke | SM7675 | 7 |
+| [Xiaomi Mi 10](/devices/models/umi) | umi | SM8250 | 5 |
+| [Xiaomi 12S Pro \(unicorn, SM8475\): UniXNU UEFI bring-up](/devices/models/unicorn) | unicorn | SM8475 | 2 |
+| [Unisoc devices](/devices/models/unisoc) | unisoc | Unisoc | 1 |
+| [Build configuration \(device unspecified\)](/devices/models/unixnu-build) | unixnu-build | build tree | 1 |
+| [Xiaomi Mi 11 M2011K2C: single-CPU platform bring-up](/devices/models/venus) | venus | SM8350 | 1 |
+| [Redmi K70](/devices/models/vermeer) | vermeer | SM8550 | 5 |
+| [Xiaomi 11T Pro \(vili, 2107113SG\), SM8350 / Snapdragon 888](/devices/models/vili) | vili | SM8350 | 1 |
+| [Xiaomi Redmi 5 Plus \(vince, Snapdragon 625, 8x Cortex-A53\)](/devices/models/vince) | vince | MSM8953 | 1 |
+| [Xiaomi Mi 6X \(2018\)](/devices/models/wayne) | wayne | SDM660 | 1 |
+| [Xiaomi Redmi Note 5](/devices/models/whyred) | whyred | SDM636 | 1 |
+| [OPPO Find X9](/devices/models/x9) | x9 | MT6993 | 1 |
+| [Xiaomi Redmi Pad SE 11"](/devices/models/xun) | xun | SM6225 | 1 |
+| [Redmi Pad format-2 qualification candidate; boot Mu and cust UniXNU must remain separate](/devices/models/yunluo) | yunluo | MT6789 | 1 |
+| [Microsoft Surface Duo 2](/devices/models/zeta) | zeta | SM8350 | 1 |
+| [Xiaomi 12 Pro](/devices/models/zeus) | zeus | SM8450 | 1 |
+| [Xiaomi MIX Fold 2 \(zizhan, SM8475\): UniXNU bring-up derived from Pong](/devices/models/zizhan) | zizhan | SM8475 | 1 |
+| [Redmi K80](/devices/models/zorn) | zorn | SM8650 | 1 |
 
-## Adding a device
+## Maintain device records {#adding-a-device}
 
-1. Follow [Porting](/porting/steps).
-2. Create the device repository and the UEFI repository.
-3. Build and bring up in stages.
-4. Add a page under `docs/devices/` with the values and commands.
-5. Add the device to the table above.
-
-Device pages are the place for board specific values. The general guide uses placeholders and links here.
-
-## sheng
-
-The [sheng page](/devices/sheng) records the Xiaomi Pad 6S Pro port. It is one device entry. The [Novatek touch driver](/drivers/sheng-novatek-touch) uses the sheng touch driver as a worked example of a built-in XNU driver.
-
-Official device pages render each repository's `porting.toml`. See the [record workflow](/porting/records).
+Publish device configuration and records using the [record guide](/porting/records#publishing-and-reuse).

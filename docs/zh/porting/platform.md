@@ -1,8 +1,8 @@
 # 平台、内存与 OS 服务
 
 先完成[设备仓库解析](/zh/porting/steps)。阅读[设备树绑定](/zh/porting/device-tree)、
-[匹配规则](/zh/drivers/device-tree-matching)、[ArmDTPlatform](/zh/drivers/arm-dt-platform)
-和 [ArmCpu](/zh/drivers/arm-cpu)。
+[匹配规则](/zh/porting/driver-development#matching)、`ArmDTPlatform`
+和 `ArmCpu`。
 
 实现后按[驱动接入步骤](/zh/porting/drivers#build-integration)连接初始化调用、归档配方和 OS ABI，
 再执行本页对应的硬件验证。
@@ -10,7 +10,7 @@
 ## 源码与接口 {#source-map}
 
 以下链接固定到已核对的源码版本。使用所选 SoC、组件和 OS 版本核对接口；
-`UniXNU-sheng` 中的文件提供板级集成示例。
+链接的设备源码提供板级集成示例。
 
 | 实现部分 | 源码 | 阅读与实现内容 |
 | --- | --- | --- |
@@ -38,6 +38,21 @@ dtc -I dtb -O dts /tmp/board-hardware.dtb
 **预期结果：** platform expert 发布预期 nub，启动核收到定时器中断，启用的次级核完成入口并收到 IPI。
 使用其他 GIC 或 PSCI 接口时，启用更多 CPU 前核对 ArmCpu 实现。
 
+### 能效簇与性能簇 {#clusters}
+
+SoC 有两类核心时，在板级 DTS 中给每个 CPU 节点加 `unixnu,cluster-type = "E"`
+或 `"P"`。ADT 随后带上每个 CPU 的 `cluster-type`，调度器补丁让 XNU 的 Edge
+调度器按一个 E 簇和一个 P 簇运行。SM8550 参考：
+
+| 输入 | 参考取值 |
+| --- | --- |
+| E 簇 | cpu0 至 cpu2（Cortex-A510） |
+| P 簇 | cpu3 至 cpu7（Cortex-A715、A710 和 X3） |
+| DTS | [`dts/sheng.dts`](https://github.com/UniXNU/UniXNU-sheng/blob/main/dts/sheng.dts) |
+| 调度器补丁 | [`patches/xnu/zzyf-sheng-amp.patch`](https://github.com/UniXNU/UniXNU-sheng/blob/main/patches/xnu/zzyf-sheng-amp.patch) |
+
+该补丁让 UI 线程留在 P 簇。用 CPU 调频器各频域的忙碌比例检查结果：UI 负载应落在 P 频域。
+
 ## 2. 核对内存和 DMA
 
 对照固件 RAM、安全保留区、帧缓冲、DSP/GPU 固件、payload 和内核分配。
@@ -45,7 +60,7 @@ dtc -I dtb -O dts /tmp/board-hardware.dtb
 两者都应与实际 UEFI 内存映射一致。
 
 对每个 DMA 设备记录地址宽度、物理地址到 IOVA 的映射、SMMU 实例/stream/context 所有权和缓存策略。
-目标匹配其转换模型时阅读 [ArmSmmu4K](/zh/drivers/arm-smmu4k)。
+目标匹配其转换模型时阅读 `ArmSmmu4K`。
 GPU、UFS、SPI 和 PCIe 可使用不同 stream 与分配策略。追踪消费端的 MMIO 与映射输入，确认其读取 DTS 属性还是板级常量。
 
 **预期结果：** 每项交接分配有明确所有者，各外设在提交任务前能访问其 DMA 范围。
@@ -55,14 +70,14 @@ GPU、UFS、SPI 和 PCIe 可使用不同 stream 与分配策略。追踪消费�
 
 | 组件 | 适配工作 | 预期观测 |
 | --- | --- | --- |
-| [RamBlock](/zh/drivers/ram-block) | 匹配 dense/packed Data 格式与 ADT 占位符，为目标存储策略实现 `native_ufs_store` 持久化回调 | Data 挂载，写入和重启行为符合选定持久化模式 |
-| [VirtioMmioBlock](/zh/drivers/virtio-mmio-block) | 提供 VirtIO MMIO 设备、队列、DMA 和中断路由，确认存储 ABI 绑定 | 挂载根卷前确认容量和读取正确 |
-| [VerifiedRoot](/zh/drivers/verified-root) | 提供选定镜像的 owner policy 与信任输入，接入存储策略归档 | 目标镜像通过策略验证 |
-| [SoftwareAES](/zh/drivers/software-aes) | 匹配 XNU AES 辅助接口与 IOCryptoAcceleratorFamily ABI，为 OS profile 构建绑定 | 加密服务发布，需要的卷操作完成 |
-| [AppleKeyStoreState](/zh/drivers/apple-key-store-state) | 根据 OS 确认 selector 和状态回调，接入初始化与事件调用方 | 所需状态查询与通知完成 |
-| [XnuPrelink](/zh/drivers/xnu-prelink) | 选择匹配的 XNU、原始 kernelcache、归档绑定和补丁顺序 | 预链接解析选定驱动并生成内核 |
-| [DarwinBoot](/zh/drivers/darwin-boot) | 将加载器加入固件或 payload，提供 Mach-O、ADT 和所需 sidecar | 加载器验证输入并报告内核交接 |
-| [ShengPreflight](/zh/drivers/sheng-preflight) | 阅读 sheng 检查，再为目标固件和内存布局编写检查 | 目标固件输入通过对应检查 |
+| `RamBlock` | 匹配 dense/packed Data 格式与 ADT 占位符，为目标存储策略实现 `native_ufs_store` 持久化回调 | Data 挂载，写入和重启行为符合选定持久化模式 |
+| `VirtioMmioBlock` | 提供 VirtIO MMIO 设备、队列、DMA 和中断路由，确认存储 ABI 绑定 | 挂载根卷前确认容量和读取正确 |
+| `VerifiedRoot` | 提供选定镜像的 owner policy 与信任输入，接入存储策略归档 | 目标镜像通过策略验证 |
+| `SoftwareAES` | 匹配 XNU AES 辅助接口与 IOCryptoAcceleratorFamily ABI，为 OS profile 构建绑定 | 加密服务发布，需要的卷操作完成 |
+| `AppleKeyStoreState` | 根据 OS 确认 selector 和状态回调，接入初始化与事件调用方 | 所需状态查询与通知完成 |
+| `XnuPrelink` | 选择匹配的 XNU、原始 kernelcache、归档绑定和补丁顺序 | 预链接解析选定驱动并生成内核 |
+| `DarwinBoot` | 将加载器加入固件或 payload，提供 Mach-O、ADT 和所需 sidecar | 加载器验证输入并报告内核交接 |
+| `ShengPreflight` | 阅读其板级检查，再为目标固件和内存布局编写检查 | 目标固件输入通过对应检查 |
 
 所需产物见[预链接](/zh/concepts/prelink)、[完整性策略](/zh/concepts/security)、
 [payload](/zh/concepts/payload)和 [userdata](/zh/guide/userdata)。

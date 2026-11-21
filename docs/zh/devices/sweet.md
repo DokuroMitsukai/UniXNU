@@ -5,16 +5,18 @@
 | 仓库 | 维护者 |
 | --- | --- |
 | [UniXNU-sweet](https://github.com/CrackerCat/UniXNU-sweet) | [CrackerCat](https://github.com/CrackerCat) |
+| [UniXNU-sweet](https://github.com/zeroninevibedslop/UniXNU-sweet) | [zeroninevibedslop](https://github.com/zeroninevibedslop) |
 
 ## 当前状态
 
-源码包含 Sweet ADT、ArmCpu 和 DarwinBoot 覆盖层，以及 Adreno 618 HFI 传输实现。当前源码记录了内核和平台静态库构建，以及 QEMU CPU 注册和持续的定时器中断。自发 IPI 投递待验证。
+CrackerCat 源码记录了内核/平台构建和 QEMU CPU/定时器检查，该设备树的固件与根卷集成待完成。
 
-设备固件集成、Apple 组件预链接和根卷目标待完成。准备镜像前，在仓库根目录运行宿主机检查。
+独立的 zeroninevibedslop 移植以 iOS 16.7.16 / Darwin 22 为目标，维护者报告 UFS 根卷挂载、`launchd`、SpringBoard/backboardd surface 交换和 USB CDC-ECM 遥测。Adreno 618 供电及 GMU/HFI 启动已有记录，GPU 命令提交和 Metal 加速仍在开发。各仓库使用各自的 OS 输入和构建路径。
 
 ## 来源
 
-- [README: CrackerCat/UniXNU-sweet](https://github.com/CrackerCat/UniXNU-sweet/blob/d3dd6fdf9e889f08b2564d92f7fef5b5c913263e/README.md)
+- [源码基线: CrackerCat/UniXNU-sweet](https://github.com/CrackerCat/UniXNU-sweet/blob/d3dd6fdf9e889f08b2564d92f7fef5b5c913263e/README.md)
+- [iOS 16 移植: zeroninevibedslop/UniXNU-sweet](https://github.com/zeroninevibedslop/UniXNU-sweet/blob/843c8ed5398388cf1116b095fb6ef30dbed6b2ad/README.md)
 
 ## 构建
 

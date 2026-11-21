@@ -69,7 +69,7 @@ The optional C-sender interoperability test needs `GIULIA_SCREEN_FIXTURE` pointi
 | Source | Transport | Use |
 | --- | --- | --- |
 | [Firmware log export](/porting/log-capture#qr-logs) | OneSend QR frames | Current UEFI Advanced Logger buffer |
-| [Persistent logs](/porting/log-capture#persistent-logs) | Reserved storage and Linux reader | Kernel messages and diagnostic snapshots |
+| [Persistent logs](/porting/log-capture#persistent-logs) | Reserved storage, Linux reader or recovery reader | Kernel messages and diagnostic snapshots |
 | UEFI serial | UART | Firmware, UniXNU and DarwinBoot |
 | Kernel serial | UART selected by `serial=` | XNU console and panic output |
 | Diagnostic page | Framebuffer | Live state after the console stops |
@@ -147,7 +147,7 @@ The page uses 48 rows of 120 columns. On a panel at least 2160 by 1400 the scale
 Label the image so a photograph identifies the build:
 
 ```
-sheng-build-tag=ks-001
+build-tag=ks-001
 ```
 
 The title bar then starts with `[ks-001]`.
@@ -220,12 +220,18 @@ The panic screen writes the formatted panic message and registers to the framebu
 
 ### Green bar at handoff {#green-bar}
 
-The top green bar is drawn by DarwinBoot's `DarwinEnter` after `ExitBootServices`, before cache maintenance, MMU shutdown, and the branch to XNU. A screen that stays there requires an entry probe or serial log to locate the next stage. The cause is undetermined from the green bar alone.
+The top green bar is drawn by DarwinBoot's `DarwinEnter` after `ExitBootServices`, before cache maintenance, MMU shutdown, and the branch to XNU. Persistent kernel logs identify later checkpoints, including `Darwin Kernel Version` and `SourceStorage: Data disk started`. Use the latest recorded kernel checkpoint when the framebuffer retains the loader screen.
+
+For a failure at kernel entry:
 
 1. Record the last `DARWINBOOT:` lines, including kernel entry address, video geometry, command line, and CPU state. Confirm the selected kernel and ADT belong to the same device and OS profile.
 2. For a kernel supported by `scripts/patch-xnu-entry-probe.py`, set `[payload] panic_screen = true` in the device profile. Rebuild with `./unixnu payload`, then `./unixnu bootimg`, and boot the new image. Check `logs/payload-patch.log` for successful probe installation.
 3. Look for the blue and magenta bars below the green band. Blue marks the MMU-off kernel entry; magenta marks the point before enabling the MMU. Check the recorded framebuffer base and stride when probe output is absent.
 4. Use `entry_probe_reset_delay = 6` for a timed reset checkpoint after MMU enable. Record the observed bars, reset timing, serial output, and `payload.json` in the device's porting record.
+
+On sheng, `storage-probe=1 log=1` records BSD initialization, the following bootstrap calls and PID 1 execution stages. Separate rings in the spare UFS log blocks retain the bootstrap and PID 1 paths. Records include sequence, PID, thread, build tag, stage, counters, virtual timer state, DAIF, pending interrupt and caller. `read-sheng-log.py --expected-tag TAG` exports matching records to `startup-checkpoints.txt` and the latest record to `startup-checkpoint.txt`. The timed runner supplies the expected tag and records header and checkpoint freshness. Keep the qualified firmware watchdog and automatic fastboot return enabled.
+
+Startup persistence includes PID 1 stages in headless builds, mount and launch-policy return codes, and the first formatted panic message before debugger entry. The log reader retains the panic message buffer under header state `5`.
 
 See [applying boot arguments](/xnu/boot-arguments#apply-arguments) when a configuration change is missing from the booted image.
 
@@ -307,7 +313,7 @@ The trace rotates one page every 8 seconds. Take three or four photographs sever
 
 The diagnostic page is built to be photographed. Use this sequence:
 
-1. Set `sheng-build-tag` to a short image label.
+1. Set `build-tag` to a short image label.
 2. Enable `boot-progress=1` for a frozen page, or `boot-progress=2` for a live page.
 3. Set `boot-diag-resume` when userland blanks the panel.
 4. Place the device on a stand. Keep the camera parallel to the panel.
@@ -355,10 +361,10 @@ python3 scripts/qemu-entry/gdb-stop.py --help
 | `kextlog=0xfff` | Kext logging |
 | `boot-progress=1` | Diagnostic page with a 30 second stall freeze |
 | `boot-progress=2` | Diagnostic page with continuous operation |
-| `sheng-build-tag=<tag>` | Image label in the title bar |
+| `build-tag=<tag>` | Image label in the title bar |
 | `boot-diag-resume=<seconds>` | Take the panel back after the OS stops scanning out |
-| `sheng-platform-stage=<n>` | Stop the platform expert at a stage |
-| `sheng-touch=<n>` | Touch probe stage |
+| `platform-stage=<n>` | Stop the platform expert at a stage |
+| `touch=<n>` | Touch probe stage |
 | `offline-legacy-phase=<n>` | Display probe stage |
 | `-no_slto_panic` | Suppress the SLTO panic |
 | `cs_debug=<mask>` | Code signing output |
@@ -388,4 +394,33 @@ jq . out/<device>/<os_profile>/<config>/boot/boot.json
 - [Boot arguments](/xnu/boot-arguments)
 - [Troubleshooting](/reference/troubleshooting)
 - [QEMU testing](/reference/qemu)
-- [sheng device page](/devices/sheng)
+- [Reference device record](/devices/sheng)
+
+The panic renderer keeps its first-panic claim in the current kernel’s zeroed BSS. A warm reboot can retain framebuffer pixels; those pixels do not determine whether the new boot may display and export its panic. The final byte of the 2,048-byte panic text buffer is reserved for the claim.
+
+## Inspection tools
+
+`local-tools/` contains commands for built images and captured desktop data.
+
+| Tool | Input and result |
+| --- | --- |
+| `adt-chosen.py` | Prints DarwinBoot properties and ranges from a payload ADT. |
+| `kernel-compile-check.py` | Compiles one source using the selected tree's XNU record; `--tree` names that tree. |
+| `record-build-provenance.py` | Records source, toolchain, arguments and outputs; `--core`, `--device` and `--uefi` select the checkouts. |
+| `recover-root-policies.py` | Matches a payload's signed headers and public owner key to `--verification-from`; `--write` writes the selected destination. |
+| `tablet-ci-blur-probe.js` | Runs Core Image blur and reports its result. |
+| `tablet-icon-stress.js` | Renders application icons at several sizes and counts failures. |
+| `tablet-pointer-probe.js` | Saves window-system pointer coordinates and times, including an initial position during an idle capture. |
+| `pointer-csv-stats.py` | Reports movement intervals, step lengths and changes after a pause. |
+| `touchpad-timing.py` | Decodes `ShengTouchpadTiming` from standard input; `--since HEX` compares an earlier record. |
+| `ocr-frames.swift` | Recognizes frame text; `--boxes` adds coordinates and `--fast` selects Vision's fast recognition mode. |
+
+Run JXA probes with `osascript -l JavaScript`. Pointer samples describe window-system coordinates; cover report timing comes from the device registry.
+
+```sh
+python3 local-tools/kernel-compile-check.py SOURCE --tree /path/to/resolved-tree
+osascript -l JavaScript local-tools/tablet-pointer-probe.js 30 40 pointer.csv 300
+python3 local-tools/pointer-csv-stats.py pointer.csv --pause 60 --big 150
+ssh TABLET 'ioreg -r -c ShengKeyboardCover -l -d 1' | python3 local-tools/touchpad-timing.py
+swift local-tools/ocr-frames.swift --fast --boxes FRAME.jpg
+```
